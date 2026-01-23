@@ -147,11 +147,12 @@ app.post('/api/export', async (req, res) => {
       whereData.values.push(...params.withoutEvents);
     }
 
-    // Use text/plain for progress updates, will switch to CSV later
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    // Set CSV headers - we'll send progress as JSON lines that client will filter
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="ubidex_export_${Date.now()}.csv"`);
     res.setHeader('Transfer-Encoding', 'chunked');
     
-    // Send initial progress
+    // Send initial progress as JSON (client will filter these lines)
     res.write(JSON.stringify({ progress: 0, message: 'Начало обработки...' }) + '\n');
 
     // Execute query to get user IDs
@@ -278,9 +279,7 @@ app.post('/api/export', async (req, res) => {
 
     res.write(JSON.stringify({ progress: 100, message: 'CSV файл успешно сгенерирован!' }) + '\n');
 
-    // Now switch to CSV content type and send CSV data
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="ubidex_export_${Date.now()}.csv"`);
+    // Send CSV data
     res.write(csvData);
     res.end();
 
