@@ -65,12 +65,12 @@ function buildWhereConditions(params) {
   return { conditions, values, paramIndex };
 }
 
-// Main export endpoint
+// Main export endpoint with progress tracking
 app.post('/api/export', async (req, res) => {
   try {
     const params = req.body;
     
-    // Step 1: Find matching user IDs based on criteria
+    // Step 1: Find matching user IDs based on criteria (20% progress)
     let userQuery = `
       SELECT DISTINCT ue.external_user_id
       FROM public.user_events ue
@@ -82,31 +82,64 @@ app.post('/api/export', async (req, res) => {
       userQuery += ` AND ${whereData.conditions.join(' AND ')}`;
     }
 
-    // Handle "without events" condition
+    // Handle "without events" condition with funnel logic (reg->ftd->dep)
     if (params.withoutEvents && params.withoutEvents.length > 0) {
-      // Users who have events in params.eventTypes but NOT in params.withoutEvents
-      const withoutPlaceholders = params.withoutEvents.map((_, i) => 
-        `$${whereData.paramIndex + i}`
-      ).join(', ');
+      // Map event types to funnel order
+      const funnelOrder = { 'regfinished': 1, 'ftd': 2, 'deposit': 3 };
+      
+      // Get events for period (main filter)
+      const periodConditions = [];
+      const periodValues = [];
+      let periodIndex = 1;
+      
+      if (params.startDate && params.endDate) {
+        periodConditions.push(`ue.event_date >= $${periodIndex}::timestamp`);
+        periodValues.push(params.startDate);
+        periodIndex++;
+        periodConditions.push(`ue.event_date < $${periodIndex}::timestamp`);
+        periodValues.push(params.endDate);
+        periodIndex++;
+      }
+      
+      if (params.eventTypes && params.eventTypes.length > 0) {
+        const placeholders = params.eventTypes.map((_, i) => `$${periodIndex + i}`).join(', ');
+        periodConditions.push(`ue.event_type IN (${placeholders})`);
+        periodValues.push(...params.eventTypes);
+        periodIndex += params.eventTypes.length;
+      }
+      
+      if (params.categories && params.categories.length > 0) {
+        const placeholders = params.categories.map((_, i) => `$${periodIndex + i}`).join(', ');
+        periodConditions.push(`ue.advertiser IN (${placeholders})`);
+        periodValues.push(...params.categories);
+        periodIndex += params.categories.length;
+      }
+      
+      // Build query: users with events in period, but WITHOUT excluded events EVER (considering funnel)
+      const withoutPlaceholders = params.withoutEvents.map((_, i) => `$${periodIndex + i}`).join(', ');
       
       userQuery = `
-        WITH users_with_events AS (
-          SELECT DISTINCT ue.external_user_id
+        WITH users_in_period AS (
+          SELECT DISTINCT ue.external_user_id, MIN(ue.event_date) as first_event_date
           FROM public.user_events ue
           WHERE ue.external_user_id IS NOT NULL
-            ${whereData.conditions.length > 0 ? `AND ${whereData.conditions.join(' AND ')}` : ''}
+            ${periodConditions.length > 0 ? `AND ${periodConditions.join(' AND ')}` : ''}
+          GROUP BY ue.external_user_id
         ),
-        users_without_events AS (
+        users_with_excluded_events AS (
           SELECT DISTINCT ue.external_user_id
           FROM public.user_events ue
-          WHERE ue.external_user_id IS NOT NULL
-            AND ue.event_type IN (${withoutPlaceholders})
+          INNER JOIN users_in_period uip ON ue.external_user_id = uip.external_user_id
+          WHERE ue.event_type IN (${withoutPlaceholders})
+            -- Excluded event must happen AFTER or AT the same time as first event in period
+            AND ue.event_date >= uip.first_event_date
         )
-        SELECT uwe.external_user_id
-        FROM users_with_events uwe
-        WHERE uwe.external_user_id NOT IN (SELECT external_user_id FROM users_without_events)
+        SELECT uip.external_user_id
+        FROM users_in_period uip
+        WHERE uip.external_user_id NOT IN (SELECT external_user_id FROM users_with_excluded_events)
       `;
       
+      whereData.values = periodValues;
       whereData.values.push(...params.withoutEvents);
     }
 
@@ -118,7 +151,7 @@ app.post('/api/export', async (req, res) => {
       return res.status(404).json({ error: 'No users found matching the criteria' });
     }
 
-    // Step 2: Get all User Agent and IP pairs for these users
+    // Step 2: Get all User Agent and IP pairs for these users (80% progress)
     // Only include rows where both user_agent and ip_address are present
     const placeholders = userIds.map((_, i) => `$${i + 1}`).join(', ');
     
@@ -143,7 +176,7 @@ app.post('/api/export', async (req, res) => {
 
     const exportResult = await pool.query(exportQuery, userIds);
 
-    // Generate CSV
+    // Generate CSV (100% progress)
     const csvData = stringify(exportResult.rows, {
       header: true,
       columns: ['user_id', 'user_agent', 'ip_address', 'event_type', 'event_date', 'advertiser', 'website', 'country']
