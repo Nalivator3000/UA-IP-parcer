@@ -725,7 +725,10 @@
                 }
                 
                 // Download CSV
-                if (csvData) {
+                console.log('[Export] CSV data length:', csvData.length);
+                console.log('[Export] CSV data preview (first 200 chars):', csvData.substring(0, 200));
+                if (csvData && csvData.trim().length > 0) {
+                    console.log('[Export] Creating blob and downloading CSV...');
                     const blob = new Blob([csvData], { type: 'text/csv' });
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -737,6 +740,10 @@
                     document.body.removeChild(a);
                     
                     updateProgress(100, 'CSV файл успешно сгенерирован!');
+                    console.log('[Export] CSV download completed');
+                } else {
+                    console.error('[Export] ERROR: CSV data is empty!');
+                    throw new Error('CSV данные пусты. Проверьте логи сервера в Railway Dashboard.');
                 }
                 
                 setTimeout(() => {
