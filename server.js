@@ -274,9 +274,23 @@ app.post('/api/export', async (req, res) => {
     res.end();
 
   } catch (error) {
-    console.error('Export error:', error);
-    res.write(JSON.stringify({ progress: 0, error: error.message }) + '\n');
-    res.end();
+    console.error('[Server] Export error:', error);
+    console.error('[Server] Error stack:', error.stack);
+    console.error('[Server] Error message:', error.message);
+    
+    // Try to send error to client if response is still writable
+    try {
+      res.write(JSON.stringify({ progress: 0, error: error.message }) + '\n');
+      res.end();
+    } catch (writeError) {
+      console.error('[Server] Failed to write error to response:', writeError);
+      // Response might already be closed, just end it
+      try {
+        res.end();
+      } catch (e) {
+        // Ignore
+      }
+    }
   }
 });
 
