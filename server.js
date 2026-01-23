@@ -163,6 +163,7 @@ app.post('/api/export', async (req, res) => {
       return res.end();
     }
 
+    console.log(`[Server] Found ${userIds.length} users, starting batch processing...`);
     res.write(JSON.stringify({ progress: 20, message: `Найдено ${userIds.length} пользователей. Получение UA/IP...` }) + '\n');
 
     // Step 2: Get all User Agent and IP pairs for these users (80% progress)
@@ -180,6 +181,8 @@ app.post('/api/export', async (req, res) => {
     const hasUserAgent = existingColumns.includes('user_agent');
     const hasIpAddress = existingColumns.includes('ip_address');
     
+    console.log(`[Server] Columns check: hasUserAgent=${hasUserAgent}, hasIpAddress=${hasIpAddress}`);
+    
     // Process in batches to avoid PostgreSQL parameter limit (max ~65535 params)
     // Use batches of 5000 users at a time
     const BATCH_SIZE = 5000;
@@ -195,29 +198,39 @@ app.post('/api/export', async (req, res) => {
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
         console.log(`[Server] Processing batch ${batchNum}/${totalBatches} (${batch.length} users)`);
         
-        const placeholders = batch.map((_, idx) => `$${idx + 1}`).join(', ');
-        const batchQuery = `
-          SELECT 
-            ue.user_agent,
-            ue.ip_address
-          FROM public.user_events ue
-          WHERE ue.external_user_id IN (${placeholders})
-            AND ue.user_agent IS NOT NULL
-            AND ue.user_agent != ''
-            AND ue.ip_address IS NOT NULL
-            AND ue.ip_address != ''
-          GROUP BY ue.user_agent, ue.ip_address
-        `;
-        
-        const batchResult = await pool.query(batchQuery, batch);
-        allRows.push(...batchResult.rows);
-        
-        // Send progress update
-        const progress = 20 + Math.floor((i + batch.length) / userIds.length * 60);
-        res.write(JSON.stringify({ 
-          progress: progress, 
-          message: `Обработка батча ${batchNum}/${totalBatches} (${allRows.length} записей получено)...` 
-        }) + '\n');
+        try {
+          const placeholders = batch.map((_, idx) => `$${idx + 1}`).join(', ');
+          console.log(`[Server] Batch ${batchNum}: Created ${batch.length} placeholders`);
+          
+          const batchQuery = `
+            SELECT 
+              ue.user_agent,
+              ue.ip_address
+            FROM public.user_events ue
+            WHERE ue.external_user_id IN (${placeholders})
+              AND ue.user_agent IS NOT NULL
+              AND ue.user_agent != ''
+              AND ue.ip_address IS NOT NULL
+              AND ue.ip_address != ''
+            GROUP BY ue.user_agent, ue.ip_address
+          `;
+          
+          console.log(`[Server] Batch ${batchNum}: Executing query with ${batch.length} parameters`);
+          const batchResult = await pool.query(batchQuery, batch);
+          console.log(`[Server] Batch ${batchNum}: Got ${batchResult.rows.length} rows`);
+          
+          allRows.push(...batchResult.rows);
+          
+          // Send progress update
+          const progress = 20 + Math.floor((i + batch.length) / userIds.length * 60);
+          res.write(JSON.stringify({ 
+            progress: progress, 
+            message: `Обработка батча ${batchNum}/${totalBatches} (${allRows.length} записей получено)...` 
+          }) + '\n');
+        } catch (batchError) {
+          console.error(`[Server] Error in batch ${batchNum}:`, batchError);
+          throw batchError;
+        }
       }
       
       // Remove duplicates (in case same UA+IP pair appears in multiple batches)
