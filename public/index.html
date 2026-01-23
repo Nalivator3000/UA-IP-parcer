@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ubidex CSV Export</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+        
+        .form-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .form-section h2 {
+            color: #555;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+        
+        input[type="date"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 10px;
+        }
+        
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .checkbox-item:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .checkbox-item input[type="checkbox"] {
+            width: auto;
+            cursor: pointer;
+        }
+        
+        .checkbox-item label {
+            margin: 0;
+            cursor: pointer;
+            font-weight: normal;
+        }
+        
+        .range-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+            margin-top: 20px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+            color: #667eea;
+            font-weight: 500;
+        }
+        
+        .error {
+            display: none;
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            border: 2px solid #fcc;
+        }
+        
+        .success {
+            display: none;
+            background: #efe;
+            color: #3c3;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            border: 2px solid #cfc;
+        }
+        
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            color: #1976d2;
+            border-left: 4px solid #1976d2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Ubidex CSV Export</h1>
+        
+        <div class="info">
+            <strong>Инструкция:</strong> Выберите параметры фильтрации для экспорта пар User Agent и IP. 
+            Приложение сначала найдет пользователей по критериям, затем извлечет все пары UA+IP для этих пользователей.
+        </div>
+        
+        <form id="exportForm">
+            <!-- Date Range -->
+            <div class="form-section">
+                <h2>📅 Период</h2>
+                <div class="range-group">
+                    <div class="form-group">
+                        <label for="startDate">Начало периода:</label>
+                        <input type="date" id="startDate" name="startDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="endDate">Конец периода:</label>
+                        <input type="date" id="endDate" name="endDate" required>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Event Types -->
+            <div class="form-section">
+                <h2>🎯 Типы событий</h2>
+                <div class="form-group">
+                    <label>Выберите типы событий для фильтрации:</label>
+                    <div class="checkbox-group" id="eventTypesContainer">
+                        <div class="loading">Загрузка типов событий...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Categories -->
+            <div class="form-section">
+                <h2>🏷️ Категории (Advertiser)</h2>
+                <div class="form-group">
+                    <label>Выберите категории (cra, slo, bet, liv и др.):</label>
+                    <div class="checkbox-group" id="categoriesContainer">
+                        <div class="loading">Загрузка категорий...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Deposit Amount Range -->
+            <div class="form-section">
+                <h2>💰 Диапазон сумм депозитов</h2>
+                <div class="range-group">
+                    <div class="form-group">
+                        <label for="minDeposit">Минимальная сумма (USD):</label>
+                        <input type="number" id="minDeposit" name="minDeposit" step="0.01" min="0" placeholder="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="maxDeposit">Максимальная сумма (USD):</label>
+                        <input type="number" id="maxDeposit" name="maxDeposit" step="0.01" min="0" placeholder="1000000">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Without Events -->
+            <div class="form-section">
+                <h2>❌ Исключить события</h2>
+                <div class="form-group">
+                    <label>Пользователи, у которых НЕТ этих событий (например, регистрации без депозитов):</label>
+                    <div class="checkbox-group" id="withoutEventsContainer">
+                        <div class="loading">Загрузка типов событий...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <button type="submit" class="btn" id="exportBtn">
+                📥 Экспортировать CSV
+            </button>
+            
+            <div class="loading" id="loading">
+                ⏳ Обработка запроса...
+            </div>
+            
+            <div class="error" id="error"></div>
+            <div class="success" id="success"></div>
+        </form>
+    </div>
+    
+    <script>
+        // Load event types and categories on page load
+        async function loadEventTypes() {
+            try {
+                const response = await fetch('/api/event-types');
+                const data = await response.json();
+                const container = document.getElementById('eventTypesContainer');
+                const withoutContainer = document.getElementById('withoutEventsContainer');
+                
+                container.innerHTML = '';
+                withoutContainer.innerHTML = '';
+                
+                data.forEach(item => {
+                    const checkbox1 = createCheckbox('eventTypes', item.event_type, `${item.event_type} (${item.count.toLocaleString()})`);
+                    const checkbox2 = createCheckbox('withoutEvents', item.event_type, `${item.event_type} (${item.count.toLocaleString()})`);
+                    container.appendChild(checkbox1);
+                    withoutContainer.appendChild(checkbox2);
+                });
+            } catch (error) {
+                console.error('Error loading event types:', error);
+            }
+        }
+        
+        async function loadCategories() {
+            try {
+                const response = await fetch('/api/categories');
+                const data = await response.json();
+                const container = document.getElementById('categoriesContainer');
+                
+                container.innerHTML = '';
+                
+                data.forEach(item => {
+                    const checkbox = createCheckbox('categories', item.advertiser, `${item.advertiser} (${item.count.toLocaleString()})`);
+                    container.appendChild(checkbox);
+                });
+            } catch (error) {
+                console.error('Error loading categories:', error);
+            }
+        }
+        
+        function createCheckbox(name, value, label) {
+            const div = document.createElement('div');
+            div.className = 'checkbox-item';
+            
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.name = name;
+            input.value = value;
+            input.id = `${name}_${value}`;
+            
+            const labelEl = document.createElement('label');
+            labelEl.htmlFor = `${name}_${value}`;
+            labelEl.textContent = label;
+            
+            div.appendChild(input);
+            div.appendChild(labelEl);
+            
+            return div;
+        }
+        
+        // Form submission
+        document.getElementById('exportForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = {
+                startDate: formData.get('startDate'),
+                endDate: formData.get('endDate'),
+                minDeposit: formData.get('minDeposit'),
+                maxDeposit: formData.get('maxDeposit'),
+                eventTypes: Array.from(document.querySelectorAll('input[name="eventTypes"]:checked')).map(cb => cb.value),
+                categories: Array.from(document.querySelectorAll('input[name="categories"]:checked')).map(cb => cb.value),
+                withoutEvents: Array.from(document.querySelectorAll('input[name="withoutEvents"]:checked')).map(cb => cb.value)
+            };
+            
+            // Validation
+            if (!data.startDate || !data.endDate) {
+                showError('Пожалуйста, выберите период');
+                return;
+            }
+            
+            if (data.eventTypes.length === 0 && data.categories.length === 0) {
+                showError('Пожалуйста, выберите хотя бы один тип события или категорию');
+                return;
+            }
+            
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('success').style.display = 'none';
+            document.getElementById('exportBtn').disabled = true;
+            
+            try {
+                const response = await fetch('/api/export', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Ошибка при экспорте');
+                }
+                
+                // Download CSV
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `ubidex_export_${Date.now()}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                showSuccess('CSV файл успешно экспортирован!');
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('exportBtn').disabled = false;
+            }
+        });
+        
+        function showError(message) {
+            const errorEl = document.getElementById('error');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
+        
+        function showSuccess(message) {
+            const successEl = document.getElementById('success');
+            successEl.textContent = message;
+            successEl.style.display = 'block';
+        }
+        
+        // Set default dates (last 30 days)
+        const today = new Date();
+        const thirtyDaysAgo = new Date(today);
+        thirtyDaysAgo.setDate(today.getDate() - 30);
+        
+        document.getElementById('endDate').value = today.toISOString().split('T')[0];
+        document.getElementById('startDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+        
+        // Load data on page load
+        loadEventTypes();
+        loadCategories();
+    </script>
+</body>
+</html>
+
