@@ -156,34 +156,73 @@ app.post('/api/export', async (req, res) => {
     }
 
     // Step 2: Get all User Agent and IP pairs for these users (80% progress)
-    // Only include rows where both user_agent and ip_address are present
+    // First check if columns exist in the table
+    const checkColumnsQuery = `
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+        AND table_name = 'user_events' 
+        AND column_name IN ('user_agent', 'ip_address')
+    `;
+    
+    const columnsResult = await pool.query(checkColumnsQuery);
+    const existingColumns = columnsResult.rows.map(row => row.column_name);
+    const hasUserAgent = existingColumns.includes('user_agent');
+    const hasIpAddress = existingColumns.includes('ip_address');
+    
     const placeholders = userIds.map((_, i) => `$${i + 1}`).join(', ');
     
-    const exportQuery = `
+    // Build query based on available columns
+    let exportQuery = `
       SELECT DISTINCT
         ue.external_user_id as user_id,
-        ue.user_agent,
-        ue.ip_address,
         ue.event_type,
         ue.event_date,
         ue.advertiser,
         ue.website,
         ue.country
+    `;
+    
+    if (hasUserAgent) {
+      exportQuery += `, ue.user_agent`;
+    } else {
+      exportQuery += `, NULL::text as user_agent`;
+    }
+    
+    if (hasIpAddress) {
+      exportQuery += `, ue.ip_address`;
+    } else {
+      exportQuery += `, NULL::text as ip_address`;
+    }
+    
+    exportQuery += `
       FROM public.user_events ue
       WHERE ue.external_user_id IN (${placeholders})
+    `;
+    
+    // Add filters only if columns exist
+    if (hasUserAgent && hasIpAddress) {
+      exportQuery += `
         AND ue.user_agent IS NOT NULL
         AND ue.user_agent != ''
         AND ue.ip_address IS NOT NULL
         AND ue.ip_address != ''
-      ORDER BY ue.external_user_id, ue.event_date
-    `;
+      `;
+    }
+    
+    exportQuery += ` ORDER BY ue.external_user_id, ue.event_date`;
 
     const exportResult = await pool.query(exportQuery, userIds);
 
     // Generate CSV (100% progress)
+    // Build columns list dynamically based on available columns
+    const columns = ['user_id', 'event_type', 'event_date', 'advertiser', 'website', 'country'];
+    if (hasUserAgent) columns.push('user_agent');
+    if (hasIpAddress) columns.push('ip_address');
+    
     const csvData = stringify(exportResult.rows, {
       header: true,
-      columns: ['user_id', 'user_agent', 'ip_address', 'event_type', 'event_date', 'advertiser', 'website', 'country']
+      columns: columns
     });
 
     // Set headers for CSV download
