@@ -244,10 +244,10 @@ app.post('/api/export', async (req, res) => {
           
           // Send progress update
           const progress = 20 + Math.floor((i + batch.length) / userIds.length * 60);
-          res.write('/*PROGRESS:' + JSON.stringify({ 
+          res.write(JSON.stringify({ 
             progress: progress, 
             message: `Обработка батча ${batchNum}/${totalBatches} (${allRows.length} записей получено)...` 
-          }) + '*/\n');
+          }) + '\n');
         } catch (batchError) {
           console.error(`[Server] Error in batch ${batchNum}:`, batchError);
           console.error(`[Server] Error stack:`, batchError.stack);
