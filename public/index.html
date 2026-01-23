@@ -579,27 +579,21 @@
             const loadingEl = document.getElementById('loading');
             const progressFill = document.getElementById('progressFill');
             const loadingPercent = document.getElementById('loadingPercent');
+            const loadingMessage = document.getElementById('loadingMessage');
             
             loadingEl.style.display = 'block';
             document.getElementById('error').style.display = 'none';
             document.getElementById('success').style.display = 'none';
             document.getElementById('exportBtn').disabled = true;
             
-            // Simulate progress
-            let progress = 0;
-            const progressInterval = setInterval(() => {
-                progress += Math.random() * 15;
-                if (progress > 90) progress = 90;
-                updateProgress(progress);
-            }, 200);
-            
-            function updateProgress(percent) {
+            function updateProgress(percent, message) {
                 progressFill.style.width = percent + '%';
                 loadingPercent.textContent = Math.round(percent) + '%';
+                if (message) loadingMessage.textContent = message;
             }
             
             try {
-                updateProgress(20); // Step 1: Finding users
+                updateProgress(0, 'Начало обработки...');
                 
                 const response = await fetch('/api/export', {
                     method: 'POST',
@@ -609,35 +603,100 @@
                     body: JSON.stringify(data)
                 });
                 
-                updateProgress(80); // Step 2: Getting UA+IP pairs
-                
                 if (!response.ok) {
                     const error = await response.json();
                     throw new Error(error.error || 'Ошибка при экспорте');
                 }
                 
-                updateProgress(95); // Step 3: Generating CSV
+                // Handle streaming response with progress updates
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let csvData = '';
+                let progressReceived = false;
+                let csvStarted = false;
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    
+                    // Try to parse JSON progress updates (they come first, separated by \n)
+                    let newlineIndex;
+                    while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+                        const line = buffer.substring(0, newlineIndex).trim();
+                        buffer = buffer.substring(newlineIndex + 1);
+                        
+                        if (line) {
+                            // Check if it's JSON (progress update)
+                            if (line.startsWith('{') && line.endsWith('}')) {
+                                try {
+                                    const update = JSON.parse(line);
+                                    if (update.progress !== undefined) {
+                                        updateProgress(update.progress, update.message || 'Обработка...');
+                                        progressReceived = true;
+                                        continue;
+                                    }
+                                    if (update.error) {
+                                        throw new Error(update.error);
+                                    }
+                                } catch (e) {
+                                    // Not valid JSON, might be CSV
+                                    csvData += line + '\n';
+                                    csvStarted = true;
+                                }
+                            } else {
+                                // CSV data
+                                csvData += line + '\n';
+                                csvStarted = true;
+                            }
+                        }
+                    }
+                }
+                
+                // Add remaining buffer to CSV (if CSV has started or no progress was received)
+                if (buffer) {
+                    if (csvStarted || !progressReceived) {
+                        csvData += buffer;
+                    } else {
+                        // Try to parse as JSON one more time
+                        try {
+                            const update = JSON.parse(buffer.trim());
+                            if (update.progress !== undefined) {
+                                updateProgress(update.progress, update.message || 'Обработка...');
+                            }
+                        } catch (e) {
+                            csvData += buffer;
+                        }
+                    }
+                }
+                
+                // If we didn't get progress updates, CSV came directly
+                if (!progressReceived) {
+                    updateProgress(100, 'Генерация CSV...');
+                }
                 
                 // Download CSV
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `ubidex_export_${Date.now()}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                
-                updateProgress(100);
-                clearInterval(progressInterval);
+                if (csvData) {
+                    const blob = new Blob([csvData], { type: 'text/csv' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `ubidex_export_${Date.now()}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    updateProgress(100, 'CSV файл успешно сгенерирован!');
+                }
                 
                 setTimeout(() => {
                     loadingEl.style.display = 'none';
                     showSuccess('CSV файл успешно экспортирован!');
                 }, 500);
             } catch (error) {
-                clearInterval(progressInterval);
                 loadingEl.style.display = 'none';
                 showError(error.message);
             } finally {

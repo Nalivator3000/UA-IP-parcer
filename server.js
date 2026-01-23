@@ -71,7 +71,7 @@ function buildWhereConditions(params) {
 app.post('/api/export', async (req, res) => {
   try {
     const params = req.body;
-    
+
     // Step 1: Find matching user IDs based on criteria (20% progress)
     let userQuery = `
       SELECT DISTINCT ue.external_user_id
@@ -147,13 +147,23 @@ app.post('/api/export', async (req, res) => {
       whereData.values.push(...params.withoutEvents);
     }
 
+    // Enable streaming response for progress updates
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    
+    // Send initial progress
+    res.write(JSON.stringify({ progress: 0, message: 'Начало обработки...' }) + '\n');
+
     // Execute query to get user IDs
     const userResult = await pool.query(userQuery, whereData.values);
     const userIds = userResult.rows.map(row => row.external_user_id);
 
     if (userIds.length === 0) {
-      return res.status(404).json({ error: 'No users found matching the criteria' });
+      res.write(JSON.stringify({ progress: 0, error: 'No users found matching the criteria' }) + '\n');
+      return res.end();
     }
+
+    res.write(JSON.stringify({ progress: 20, message: `Найдено ${userIds.length} пользователей. Получение UA/IP...` }) + '\n');
 
     // Step 2: Get all User Agent and IP pairs for these users (80% progress)
     // First check if columns exist in the table
@@ -214,6 +224,8 @@ app.post('/api/export', async (req, res) => {
 
     const exportResult = await pool.query(exportQuery, userIds);
 
+    res.write(JSON.stringify({ progress: 80, message: `Получено ${exportResult.rows.length} записей. Генерация CSV...` }) + '\n');
+
     // Generate CSV (100% progress)
     // Build columns list dynamically based on available columns
     const columns = ['user_id', 'event_type', 'event_date', 'advertiser', 'website', 'country'];
@@ -225,14 +237,18 @@ app.post('/api/export', async (req, res) => {
       columns: columns
     });
 
+    res.write(JSON.stringify({ progress: 100, message: 'CSV файл успешно сгенерирован!' }) + '\n');
+
     // Set headers for CSV download
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="ubidex_export_${Date.now()}.csv"`);
-    res.send(csvData);
+    res.write(csvData);
+    res.end();
 
   } catch (error) {
     console.error('Export error:', error);
-    res.status(500).json({ error: error.message });
+    res.write(JSON.stringify({ progress: 0, error: error.message }) + '\n');
+    res.end();
   }
 });
 
