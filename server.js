@@ -147,13 +147,12 @@ app.post('/api/export', async (req, res) => {
       whereData.values.push(...params.withoutEvents);
     }
 
-    // Set CSV headers first (before any writes)
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="ubidex_export_${Date.now()}.csv"`);
+    // Use text/plain for progress updates, will switch to CSV later
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.setHeader('Transfer-Encoding', 'chunked');
     
-    // Send initial progress as JSON comment in CSV (will be filtered on client)
-    res.write('/*PROGRESS:' + JSON.stringify({ progress: 0, message: 'Начало обработки...' }) + '*/\n');
+    // Send initial progress
+    res.write(JSON.stringify({ progress: 0, message: 'Начало обработки...' }) + '\n');
 
     // Execute query to get user IDs
     const userResult = await pool.query(userQuery, whereData.values);
@@ -165,7 +164,7 @@ app.post('/api/export', async (req, res) => {
     }
 
     console.log(`[Server] Found ${userIds.length} users, starting batch processing...`);
-    res.write('/*PROGRESS:' + JSON.stringify({ progress: 20, message: `Найдено ${userIds.length} пользователей. Получение UA/IP...` }) + '*/\n');
+    res.write(JSON.stringify({ progress: 20, message: `Найдено ${userIds.length} пользователей. Получение UA/IP...` }) + '\n');
 
     // Step 2: Get all User Agent and IP pairs for these users (80% progress)
     // First check if columns exist in the table
@@ -266,7 +265,7 @@ app.post('/api/export', async (req, res) => {
       var exportResult = { rows: [] };
     }
 
-    res.write('/*PROGRESS:' + JSON.stringify({ progress: 80, message: `Получено ${exportResult.rows.length} записей. Генерация CSV...` }) + '*/\n');
+    res.write(JSON.stringify({ progress: 80, message: `Получено ${exportResult.rows.length} записей. Генерация CSV...` }) + '\n');
 
     // Generate CSV (100% progress)
     // Only export UA+IP pairs
@@ -277,9 +276,11 @@ app.post('/api/export', async (req, res) => {
       columns: columns
     });
 
-    res.write('/*PROGRESS:' + JSON.stringify({ progress: 100, message: 'CSV файл успешно сгенерирован!' }) + '*/\n');
-    
-    // Write CSV data
+    res.write(JSON.stringify({ progress: 100, message: 'CSV файл успешно сгенерирован!' }) + '\n');
+
+    // Now switch to CSV content type and send CSV data
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="ubidex_export_${Date.now()}.csv"`);
     res.write(csvData);
     res.end();
 
@@ -293,7 +294,7 @@ app.post('/api/export', async (req, res) => {
       if (!res.headersSent) {
         res.setHeader('Content-Type', 'application/json');
       }
-      res.write('/*PROGRESS:' + JSON.stringify({ progress: 0, error: error.message }) + '*/\n');
+      res.write(JSON.stringify({ progress: 0, error: error.message }) + '\n');
       res.end();
     } catch (writeError) {
       console.error('[Server] Failed to write error to response:', writeError);
