@@ -180,34 +180,65 @@ app.post('/api/export', async (req, res) => {
     const hasUserAgent = existingColumns.includes('user_agent');
     const hasIpAddress = existingColumns.includes('ip_address');
     
-    const placeholders = userIds.map((_, i) => `$${i + 1}`).join(', ');
+    // Process in batches to avoid PostgreSQL parameter limit (max ~65535 params)
+    // Use batches of 5000 users at a time
+    const BATCH_SIZE = 5000;
+    const allRows = [];
+    const totalBatches = Math.ceil(userIds.length / BATCH_SIZE);
     
-    // Build query based on available columns - ONLY UA+IP pairs
-    let exportQuery = '';
+    console.log(`[Server] Processing ${userIds.length} users in ${totalBatches} batches of ${BATCH_SIZE}`);
     
     if (hasUserAgent && hasIpAddress) {
-      // Only export UA+IP pairs where both are present
-      exportQuery = `
-        SELECT DISTINCT
-          ue.user_agent,
-          ue.ip_address
-        FROM public.user_events ue
-        WHERE ue.external_user_id IN (${placeholders})
-          AND ue.user_agent IS NOT NULL
-          AND ue.user_agent != ''
-          AND ue.ip_address IS NOT NULL
-          AND ue.ip_address != ''
-        ORDER BY ue.user_agent, ue.ip_address
-      `;
+      // Process users in batches
+      for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
+        const batch = userIds.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        console.log(`[Server] Processing batch ${batchNum}/${totalBatches} (${batch.length} users)`);
+        
+        const placeholders = batch.map((_, idx) => `$${idx + 1}`).join(', ');
+        const batchQuery = `
+          SELECT DISTINCT
+            ue.user_agent,
+            ue.ip_address
+          FROM public.user_events ue
+          WHERE ue.external_user_id IN (${placeholders})
+            AND ue.user_agent IS NOT NULL
+            AND ue.user_agent != ''
+            AND ue.ip_address IS NOT NULL
+            AND ue.ip_address != ''
+        `;
+        
+        const batchResult = await pool.query(batchQuery, batch);
+        allRows.push(...batchResult.rows);
+        
+        // Send progress update
+        const progress = 20 + Math.floor((i + batch.length) / userIds.length * 60);
+        res.write(JSON.stringify({ 
+          progress: progress, 
+          message: `Обработка батча ${batchNum}/${totalBatches} (${allRows.length} записей получено)...` 
+        }) + '\n');
+      }
+      
+      // Remove duplicates (in case same UA+IP pair appears in multiple batches)
+      const uniqueRows = Array.from(
+        new Map(allRows.map(row => [`${row.user_agent}|${row.ip_address}`, row])).values()
+      );
+      
+      console.log(`[Server] Total unique UA+IP pairs: ${uniqueRows.length} (from ${allRows.length} total)`);
+      
+      // Sort results
+      uniqueRows.sort((a, b) => {
+        if (a.user_agent !== b.user_agent) {
+          return (a.user_agent || '').localeCompare(b.user_agent || '');
+        }
+        return (a.ip_address || '').localeCompare(b.ip_address || '');
+      });
+      
+      var exportResult = { rows: uniqueRows };
     } else {
       // If columns don't exist, return empty result
-      exportQuery = `
-        SELECT NULL::text as user_agent, NULL::text as ip_address
-        WHERE FALSE
-      `;
+      var exportResult = { rows: [] };
     }
-
-    const exportResult = await pool.query(exportQuery, userIds);
 
     res.write(JSON.stringify({ progress: 80, message: `Получено ${exportResult.rows.length} записей. Генерация CSV...` }) + '\n');
 
