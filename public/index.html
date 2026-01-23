@@ -698,19 +698,24 @@
                 }
                 
                 // Add remaining buffer to CSV (if CSV has started or no progress was received)
+                console.log('[Export] Processing remaining buffer. Length:', buffer.length, 'CSV started:', csvStarted, 'Progress received:', progressReceived);
                 if (buffer) {
-                    if (csvStarted || !progressReceived) {
-                        csvData += buffer;
-                    } else {
-                        // Try to parse as JSON one more time
+                    // Check if buffer contains progress update
+                    const trimmedBuffer = buffer.trim();
+                    if (trimmedBuffer.startsWith('/*PROGRESS:') && trimmedBuffer.endsWith('*/')) {
                         try {
-                            const update = JSON.parse(buffer.trim());
+                            const jsonStr = trimmedBuffer.substring(11, trimmedBuffer.length - 2);
+                            const update = JSON.parse(jsonStr);
+                            console.log('[Export] Parsed final progress update:', update);
                             if (update.progress !== undefined) {
                                 updateProgress(update.progress, update.message || 'Обработка...');
                             }
                         } catch (e) {
+                            console.log('[Export] Final buffer is not a progress update, adding to CSV');
                             csvData += buffer;
                         }
+                    } else {
+                        csvData += buffer;
                     }
                 }
                 
