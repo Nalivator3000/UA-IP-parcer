@@ -475,7 +475,7 @@
                 <div class="loading-content">
                     <div class="loading-text">
                         <span>⏳</span>
-                        <span>Обработка запроса...</span>
+                        <span id="loadingMessage">Обработка запроса...</span>
                     </div>
                     <div class="loading-percent" id="loadingPercent">0%</div>
                 </div>
@@ -587,9 +587,9 @@
             document.getElementById('exportBtn').disabled = true;
             
             function updateProgress(percent, message) {
-                progressFill.style.width = percent + '%';
-                loadingPercent.textContent = Math.round(percent) + '%';
-                if (message) loadingMessage.textContent = message;
+                if (progressFill) progressFill.style.width = percent + '%';
+                if (loadingPercent) loadingPercent.textContent = Math.round(percent) + '%';
+                if (loadingMessage && message) loadingMessage.textContent = message;
             }
             
             try {
