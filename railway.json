@@ -7,6 +7,11 @@
     "startCommand": "npm start",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
+  },
+  "github": {
+    "enabled": true,
+    "deployOnPush": true,
+    "branch": "main"
   }
 }
 
