@@ -18,6 +18,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
+// Request logging middleware
+app.use((req, res, next) => {
+  req.requestId = Date.now();
+  console.log(`[${req.requestId}] ${req.method} ${req.path}`);
+  next();
+});
+
 // Helper function to build WHERE conditions
 function buildWhereConditions(params) {
   const conditions = [];
@@ -69,6 +76,10 @@ function buildWhereConditions(params) {
 
 // Main export endpoint with progress tracking
 app.post('/api/export', async (req, res) => {
+  const requestId = Date.now();
+  console.log(`[${requestId}] ====== NEW EXPORT REQUEST ======`);
+  console.log(`[${requestId}] Request params:`, JSON.stringify(req.body, null, 2));
+  
   try {
     const params = req.body;
 
@@ -80,9 +91,14 @@ app.post('/api/export', async (req, res) => {
     `;
 
     const whereData = buildWhereConditions(params);
+    console.log(`[${requestId}] WHERE conditions:`, whereData.conditions);
+    console.log(`[${requestId}] WHERE values count:`, whereData.values.length);
+    
     if (whereData.conditions.length > 0) {
       userQuery += ` AND ${whereData.conditions.join(' AND ')}`;
     }
+    
+    console.log(`[${requestId}] User query (first 500 chars):`, userQuery.substring(0, 500));
 
     // Handle "without events" condition with funnel logic (reg->ftd->dep)
     if (params.withoutEvents && params.withoutEvents.length > 0) {
@@ -156,15 +172,19 @@ app.post('/api/export', async (req, res) => {
     res.write(JSON.stringify({ progress: 0, message: 'Начало обработки...' }) + '\n');
 
     // Execute query to get user IDs
+    console.log(`[${requestId}] Executing user query...`);
+    const queryStartTime = Date.now();
     const userResult = await pool.query(userQuery, whereData.values);
+    const queryTime = Date.now() - queryStartTime;
+    console.log(`[${requestId}] User query executed in ${queryTime}ms`);
+    console.log(`[${requestId}] User query returned ${userResult.rows.length} rows`);
+    
     const userIds = userResult.rows.map(row => row.external_user_id);
+    console.log(`[${requestId}] Extracted ${userIds.length} unique user IDs`);
+    console.log(`[${requestId}] Sample user IDs:`, userIds.slice(0, 5));
 
     if (userIds.length === 0) {
-      res.write(JSON.stringify({ progress: 0, error: 'No users found matching the criteria' }) + '\n');
-      return res.end();
-    }
-
-    if (userIds.length === 0) {
+      console.log(`[${requestId}] ERROR: No users found matching criteria`);
       res.write(JSON.stringify({ progress: 0, error: 'No users found matching the criteria' }) + '\n');
       return res.end();
     }
@@ -233,11 +253,30 @@ app.post('/api/export', async (req, res) => {
           console.log(`[Server] Batch ${batchNum}: Executing query with ${batch.length} parameters`);
           console.log(`[Server] Batch ${batchNum}: Sample user IDs:`, batch.slice(0, 3));
           
+          const batchQueryStartTime = Date.now();
           const batchResult = await pool.query(batchQuery, batch);
-          console.log(`[Server] Batch ${batchNum}: Got ${batchResult.rows.length} rows`);
+          const batchQueryTime = Date.now() - batchQueryStartTime;
+          console.log(`[${requestId}] Batch ${batchNum}: Query executed in ${batchQueryTime}ms, got ${batchResult.rows.length} rows`);
           
           if (batchResult.rows.length > 0) {
-            console.log(`[Server] Batch ${batchNum}: Sample rows:`, batchResult.rows.slice(0, 2));
+            console.log(`[${requestId}] Batch ${batchNum}: Sample rows:`, JSON.stringify(batchResult.rows.slice(0, 2), null, 2));
+            // Проверяем наличие данных в полях
+            const sampleRow = batchResult.rows[0];
+            console.log(`[${requestId}] Batch ${batchNum}: Sample row check - user_agent length: ${sampleRow.user_agent?.length || 0}, ip_address length: ${sampleRow.ip_address?.length || 0}`);
+          } else {
+            console.log(`[${requestId}] Batch ${batchNum}: WARNING - No rows returned, checking if users have UA/IP data...`);
+            // Проверяем, есть ли вообще данные для этих пользователей
+            const checkQuery = `
+              SELECT 
+                COUNT(*) as total_events,
+                COUNT(CASE WHEN user_agent IS NOT NULL AND user_agent != '' THEN 1 END) as events_with_ua,
+                COUNT(CASE WHEN ip_address IS NOT NULL AND ip_address != '' THEN 1 END) as events_with_ip,
+                COUNT(CASE WHEN user_agent IS NOT NULL AND user_agent != '' AND ip_address IS NOT NULL AND ip_address != '' THEN 1 END) as events_with_both
+              FROM public.user_events ue
+              WHERE ue.external_user_id IN (${placeholders})
+            `;
+            const checkResult = await pool.query(checkQuery, batch);
+            console.log(`[${requestId}] Batch ${batchNum}: Data check for batch users:`, checkResult.rows[0]);
           }
           
           allRows.push(...batchResult.rows);
@@ -297,9 +336,20 @@ app.post('/api/export', async (req, res) => {
     res.end();
 
   } catch (error) {
-    console.error('[Server] Export error:', error);
-    console.error('[Server] Error stack:', error.stack);
-    console.error('[Server] Error message:', error.message);
+    const requestId = req.requestId || Date.now();
+    console.error(`[${requestId}] ====== EXPORT ERROR ======`);
+    console.error(`[${requestId}] Error type:`, error.constructor.name);
+    console.error(`[${requestId}] Error message:`, error.message);
+    console.error(`[${requestId}] Error stack:`, error.stack);
+    if (error.code) {
+      console.error(`[${requestId}] PostgreSQL error code:`, error.code);
+    }
+    if (error.detail) {
+      console.error(`[${requestId}] PostgreSQL error detail:`, error.detail);
+    }
+    if (error.hint) {
+      console.error(`[${requestId}] PostgreSQL error hint:`, error.hint);
+    }
     
     // Try to send error to client if response is still writable
     try {
@@ -368,8 +418,41 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Test database connection on startup
+pool.query('SELECT NOW()', (err, res) => {
+  if (err) {
+    console.error('❌ Database connection failed:', err.message);
+  } else {
+    console.log('✅ Database connection successful');
+    console.log('   Server time:', res.rows[0].now);
+  }
+});
+
+// Check if columns exist on startup
+pool.query(`
+  SELECT column_name 
+  FROM information_schema.columns 
+  WHERE table_schema = 'public' 
+    AND table_name = 'user_events' 
+    AND column_name IN ('user_agent', 'ip_address')
+`, (err, res) => {
+  if (err) {
+    console.error('❌ Failed to check columns:', err.message);
+  } else {
+    const columns = res.rows.map(row => row.column_name);
+    console.log('📊 Available columns in user_events:', columns);
+    if (columns.includes('user_agent') && columns.includes('ip_address')) {
+      console.log('✅ Required columns (user_agent, ip_address) are present');
+    } else {
+      console.log('⚠️  WARNING: Missing columns!');
+      console.log('   user_agent:', columns.includes('user_agent') ? '✅' : '❌');
+      console.log('   ip_address:', columns.includes('ip_address') ? '✅' : '❌');
+    }
+  }
+});
+
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Open http://localhost:${PORT} in your browser`);
+  console.log(`\n🚀 Server running on port ${PORT}`);
+  console.log(`📱 Open http://localhost:${PORT} in your browser\n`);
 });
 
