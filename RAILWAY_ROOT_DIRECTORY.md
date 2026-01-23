@@ -38,23 +38,28 @@ railway variables set RAILWAY_ROOT_DIR=csv_export_app
 railway service update --root-dir csv_export_app
 ```
 
-### Вариант 3: Создать railway.json в корне репозитория
+### Вариант 3: Если Root Directory не работает
 
-Если Root Directory не работает, можно создать `railway.json` в корне репозитория:
+Если Root Directory не работает, можно использовать Railway CLI для деплоя из подпапки:
 
-```json
-{
-  "$schema": "https://railway.app/railway.schema.json",
-  "build": {
-    "builder": "NIXPACKS"
-  },
-  "deploy": {
-    "startCommand": "cd csv_export_app && npm start",
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
-  }
-}
+```bash
+# Установите Railway CLI
+npm install -g @railway/cli
+
+# Войдите в Railway
+railway login
+
+# Перейдите в подпапку проекта
+cd csv_export_app
+
+# Подключите проект
+railway link
+
+# Деплой
+railway up
 ```
+
+**ВАЖНО:** В `railway.json` НЕ должно быть `cd csv_export_app` в командах, если Root Directory установлен правильно!
 
 ## Проверка
 
