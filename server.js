@@ -182,55 +182,38 @@ app.post('/api/export', async (req, res) => {
     
     const placeholders = userIds.map((_, i) => `$${i + 1}`).join(', ');
     
-    // Build query based on available columns
-    let exportQuery = `
-      SELECT DISTINCT
-        ue.external_user_id as user_id,
-        ue.event_type,
-        ue.event_date,
-        ue.advertiser,
-        ue.website,
-        ue.country
-    `;
+    // Build query based on available columns - ONLY UA+IP pairs
+    let exportQuery = '';
     
-    if (hasUserAgent) {
-      exportQuery += `, ue.user_agent`;
-    } else {
-      exportQuery += `, NULL::text as user_agent`;
-    }
-    
-    if (hasIpAddress) {
-      exportQuery += `, ue.ip_address`;
-    } else {
-      exportQuery += `, NULL::text as ip_address`;
-    }
-    
-    exportQuery += `
-      FROM public.user_events ue
-      WHERE ue.external_user_id IN (${placeholders})
-    `;
-    
-    // Add filters only if columns exist
     if (hasUserAgent && hasIpAddress) {
-      exportQuery += `
-        AND ue.user_agent IS NOT NULL
-        AND ue.user_agent != ''
-        AND ue.ip_address IS NOT NULL
-        AND ue.ip_address != ''
+      // Only export UA+IP pairs where both are present
+      exportQuery = `
+        SELECT DISTINCT
+          ue.user_agent,
+          ue.ip_address
+        FROM public.user_events ue
+        WHERE ue.external_user_id IN (${placeholders})
+          AND ue.user_agent IS NOT NULL
+          AND ue.user_agent != ''
+          AND ue.ip_address IS NOT NULL
+          AND ue.ip_address != ''
+        ORDER BY ue.user_agent, ue.ip_address
+      `;
+    } else {
+      // If columns don't exist, return empty result
+      exportQuery = `
+        SELECT NULL::text as user_agent, NULL::text as ip_address
+        WHERE FALSE
       `;
     }
-    
-    exportQuery += ` ORDER BY ue.external_user_id, ue.event_date`;
 
     const exportResult = await pool.query(exportQuery, userIds);
 
     res.write(JSON.stringify({ progress: 80, message: `Получено ${exportResult.rows.length} записей. Генерация CSV...` }) + '\n');
 
     // Generate CSV (100% progress)
-    // Build columns list dynamically based on available columns
-    const columns = ['user_id', 'event_type', 'event_date', 'advertiser', 'website', 'country'];
-    if (hasUserAgent) columns.push('user_agent');
-    if (hasIpAddress) columns.push('ip_address');
+    // Only export UA+IP pairs
+    const columns = ['user_agent', 'ip_address'];
     
     const csvData = stringify(exportResult.rows, {
       header: true,
