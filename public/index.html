@@ -667,10 +667,11 @@
                         buffer = buffer.substring(newlineIndex + 1);
                         
                         if (line) {
-                            // Check if it's JSON (progress update)
-                            if (line.startsWith('{') && line.endsWith('}')) {
+                            // Check if it's a progress update (format: /*PROGRESS:{...}*/)
+                            if (line.startsWith('/*PROGRESS:') && line.endsWith('*/')) {
                                 try {
-                                    const update = JSON.parse(line);
+                                    const jsonStr = line.substring(11, line.length - 2); // Remove /*PROGRESS: and */
+                                    const update = JSON.parse(jsonStr);
                                     console.log('[Export] Progress update:', update);
                                     if (update.progress !== undefined) {
                                         updateProgress(update.progress, update.message || 'Обработка...');
@@ -682,8 +683,8 @@
                                         throw new Error(update.error);
                                     }
                                 } catch (e) {
-                                    console.warn('[Export] Failed to parse JSON, treating as CSV:', e.message);
-                                    // Not valid JSON, might be CSV
+                                    console.warn('[Export] Failed to parse progress update:', e.message);
+                                    // Not a valid progress update, treat as CSV
                                     csvData += line + '\n';
                                     csvStarted = true;
                                 }
