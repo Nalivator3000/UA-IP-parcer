@@ -164,6 +164,11 @@ app.post('/api/export', async (req, res) => {
       return res.end();
     }
 
+    if (userIds.length === 0) {
+      res.write(JSON.stringify({ progress: 0, error: 'No users found matching the criteria' }) + '\n');
+      return res.end();
+    }
+
     console.log(`[Server] Found ${userIds.length} users, starting batch processing...`);
     res.write(JSON.stringify({ progress: 20, message: `Найдено ${userIds.length} пользователей. Получение UA/IP...` }) + '\n');
 
@@ -177,12 +182,20 @@ app.post('/api/export', async (req, res) => {
         AND column_name IN ('user_agent', 'ip_address')
     `;
     
+    console.log(`[Server] Checking if columns exist...`);
     const columnsResult = await pool.query(checkColumnsQuery);
     const existingColumns = columnsResult.rows.map(row => row.column_name);
     const hasUserAgent = existingColumns.includes('user_agent');
     const hasIpAddress = existingColumns.includes('ip_address');
     
     console.log(`[Server] Columns check: hasUserAgent=${hasUserAgent}, hasIpAddress=${hasIpAddress}`);
+    console.log(`[Server] Existing columns:`, existingColumns);
+    
+    if (!hasUserAgent || !hasIpAddress) {
+      console.error(`[Server] ERROR: Columns missing! hasUserAgent=${hasUserAgent}, hasIpAddress=${hasIpAddress}`);
+      res.write(JSON.stringify({ progress: 0, error: `Колонки не найдены: user_agent=${hasUserAgent}, ip_address=${hasIpAddress}` }) + '\n');
+      return res.end();
+    }
     
     // Process in batches to avoid PostgreSQL parameter limit (max ~65535 params)
     // Use batches of 5000 users at a time
