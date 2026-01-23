@@ -193,6 +193,7 @@ app.post('/api/export', async (req, res) => {
     console.log(`[Server] Processing ${userIds.length} users in ${totalBatches} batches of ${BATCH_SIZE}`);
     
     if (hasUserAgent && hasIpAddress) {
+      console.log(`[Server] Both columns exist, starting batch processing...`);
       // Process users in batches
       for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
         const batch = userIds.slice(i, i + BATCH_SIZE);
@@ -217,8 +218,14 @@ app.post('/api/export', async (req, res) => {
           `;
           
           console.log(`[Server] Batch ${batchNum}: Executing query with ${batch.length} parameters`);
+          console.log(`[Server] Batch ${batchNum}: Sample user IDs:`, batch.slice(0, 3));
+          
           const batchResult = await pool.query(batchQuery, batch);
           console.log(`[Server] Batch ${batchNum}: Got ${batchResult.rows.length} rows`);
+          
+          if (batchResult.rows.length > 0) {
+            console.log(`[Server] Batch ${batchNum}: Sample rows:`, batchResult.rows.slice(0, 2));
+          }
           
           allRows.push(...batchResult.rows);
           
@@ -230,9 +237,12 @@ app.post('/api/export', async (req, res) => {
           }) + '*/\n');
         } catch (batchError) {
           console.error(`[Server] Error in batch ${batchNum}:`, batchError);
+          console.error(`[Server] Error stack:`, batchError.stack);
           throw batchError;
         }
       }
+      
+      console.log(`[Server] All batches processed. Total rows before deduplication: ${allRows.length}`);
       
       // Remove duplicates (in case same UA+IP pair appears in multiple batches)
       const uniqueRows = Array.from(
@@ -251,6 +261,7 @@ app.post('/api/export', async (req, res) => {
       
       var exportResult = { rows: uniqueRows };
     } else {
+      console.log(`[Server] Columns missing: hasUserAgent=${hasUserAgent}, hasIpAddress=${hasIpAddress}`);
       // If columns don't exist, return empty result
       var exportResult = { rows: [] };
     }
