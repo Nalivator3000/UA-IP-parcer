@@ -24,12 +24,14 @@ function buildWhereConditions(params) {
   const values = [];
   let paramIndex = 1;
 
-  // Date range
+  // Date range - start from beginning of day, end at end of day
   if (params.startDate && params.endDate) {
-    conditions.push(`ue.event_date >= $${paramIndex}::timestamp`);
+    // Start: beginning of the day (00:00:00)
+    conditions.push(`ue.event_date >= $${paramIndex}::date`);
     values.push(params.startDate);
     paramIndex++;
-    conditions.push(`ue.event_date < $${paramIndex}::timestamp`);
+    // End: end of the day (23:59:59) - use next day with < to include full last day
+    conditions.push(`ue.event_date < ($${paramIndex}::date + INTERVAL '1 day')`);
     values.push(params.endDate);
     paramIndex++;
   }
@@ -93,10 +95,12 @@ app.post('/api/export', async (req, res) => {
       let periodIndex = 1;
       
       if (params.startDate && params.endDate) {
-        periodConditions.push(`ue.event_date >= $${periodIndex}::timestamp`);
+        // Start: beginning of the day (00:00:00)
+        periodConditions.push(`ue.event_date >= $${periodIndex}::date`);
         periodValues.push(params.startDate);
         periodIndex++;
-        periodConditions.push(`ue.event_date < $${periodIndex}::timestamp`);
+        // End: end of the day (23:59:59) - use next day with < to include full last day
+        periodConditions.push(`ue.event_date < ($${periodIndex}::date + INTERVAL '1 day')`);
         periodValues.push(params.endDate);
         periodIndex++;
       }
