@@ -576,20 +576,51 @@
             }
             
             // Show loading with progress
+            console.log('[Export] Starting export process...');
             const loadingEl = document.getElementById('loading');
             const progressFill = document.getElementById('progressFill');
             const loadingPercent = document.getElementById('loadingPercent');
             const loadingMessage = document.getElementById('loadingMessage');
             
+            console.log('[Export] Elements found:', {
+                loadingEl: !!loadingEl,
+                progressFill: !!progressFill,
+                loadingPercent: !!loadingPercent,
+                loadingMessage: !!loadingMessage
+            });
+            
+            if (!loadingEl) {
+                console.error('[Export] ERROR: loading element not found!');
+                showError('Ошибка: элемент загрузки не найден');
+                return;
+            }
+            
             loadingEl.style.display = 'block';
-            document.getElementById('error').style.display = 'none';
-            document.getElementById('success').style.display = 'none';
-            document.getElementById('exportBtn').disabled = true;
+            const errorEl = document.getElementById('error');
+            const successEl = document.getElementById('success');
+            const exportBtn = document.getElementById('exportBtn');
+            
+            if (errorEl) errorEl.style.display = 'none';
+            if (successEl) successEl.style.display = 'none';
+            if (exportBtn) exportBtn.disabled = true;
             
             function updateProgress(percent, message) {
-                if (progressFill) progressFill.style.width = percent + '%';
-                if (loadingPercent) loadingPercent.textContent = Math.round(percent) + '%';
-                if (loadingMessage && message) loadingMessage.textContent = message;
+                console.log(`[Export] Progress: ${percent}%`, message || '');
+                if (progressFill) {
+                    progressFill.style.width = percent + '%';
+                } else {
+                    console.warn('[Export] progressFill element not found');
+                }
+                if (loadingPercent) {
+                    loadingPercent.textContent = Math.round(percent) + '%';
+                } else {
+                    console.warn('[Export] loadingPercent element not found');
+                }
+                if (loadingMessage && message) {
+                    loadingMessage.textContent = message;
+                } else if (message) {
+                    console.warn('[Export] loadingMessage element not found, message:', message);
+                }
             }
             
             try {
@@ -609,18 +640,25 @@
                 }
                 
                 // Handle streaming response with progress updates
+                console.log('[Export] Starting to read stream...');
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let buffer = '';
                 let csvData = '';
                 let progressReceived = false;
                 let csvStarted = false;
+                let chunkCount = 0;
                 
                 while (true) {
                     const { done, value } = await reader.read();
-                    if (done) break;
+                    if (done) {
+                        console.log('[Export] Stream finished. Chunks:', chunkCount);
+                        break;
+                    }
                     
+                    chunkCount++;
                     buffer += decoder.decode(value, { stream: true });
+                    console.log(`[Export] Chunk ${chunkCount} received, buffer length:`, buffer.length);
                     
                     // Try to parse JSON progress updates (they come first, separated by \n)
                     let newlineIndex;
@@ -633,15 +671,18 @@
                             if (line.startsWith('{') && line.endsWith('}')) {
                                 try {
                                     const update = JSON.parse(line);
+                                    console.log('[Export] Progress update:', update);
                                     if (update.progress !== undefined) {
                                         updateProgress(update.progress, update.message || 'Обработка...');
                                         progressReceived = true;
                                         continue;
                                     }
                                     if (update.error) {
+                                        console.error('[Export] Error in progress update:', update.error);
                                         throw new Error(update.error);
                                     }
                                 } catch (e) {
+                                    console.warn('[Export] Failed to parse JSON, treating as CSV:', e.message);
                                     // Not valid JSON, might be CSV
                                     csvData += line + '\n';
                                     csvStarted = true;
@@ -697,10 +738,14 @@
                     showSuccess('CSV файл успешно экспортирован!');
                 }, 500);
             } catch (error) {
-                loadingEl.style.display = 'none';
+                console.error('[Export] Error occurred:', error);
+                console.error('[Export] Error stack:', error.stack);
+                if (loadingEl) loadingEl.style.display = 'none';
                 showError(error.message);
             } finally {
-                document.getElementById('exportBtn').disabled = false;
+                const exportBtn = document.getElementById('exportBtn');
+                if (exportBtn) exportBtn.disabled = false;
+                console.log('[Export] Export process finished');
             }
         });
         
