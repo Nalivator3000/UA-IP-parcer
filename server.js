@@ -197,7 +197,7 @@ app.post('/api/export', async (req, res) => {
         
         const placeholders = batch.map((_, idx) => `$${idx + 1}`).join(', ');
         const batchQuery = `
-          SELECT DISTINCT
+          SELECT 
             ue.user_agent,
             ue.ip_address
           FROM public.user_events ue
@@ -206,6 +206,7 @@ app.post('/api/export', async (req, res) => {
             AND ue.user_agent != ''
             AND ue.ip_address IS NOT NULL
             AND ue.ip_address != ''
+          GROUP BY ue.user_agent, ue.ip_address
         `;
         
         const batchResult = await pool.query(batchQuery, batch);
