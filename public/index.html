@@ -430,17 +430,6 @@
                 </div>
             </div>
             
-            <!-- Categories -->
-            <div class="form-section">
-                <h2>Категории (Advertiser)</h2>
-                <div class="form-group">
-                    <label>Выберите категории (cra, slo, bet, liv и др.):</label>
-                    <div class="checkbox-group" id="categoriesContainer">
-                        <div class="loading">Загрузка категорий...</div>
-                    </div>
-                </div>
-            </div>
-            
             <!-- Deposit Amount Range -->
             <div class="form-section">
                 <h2>Диапазон сумм депозитов</h2>
@@ -560,7 +549,6 @@
                 minDeposit: formData.get('minDeposit'),
                 maxDeposit: formData.get('maxDeposit'),
                 eventTypes: Array.from(document.querySelectorAll('input[name="eventTypes"]:checked')).map(cb => cb.value),
-                categories: Array.from(document.querySelectorAll('input[name="categories"]:checked')).map(cb => cb.value),
                 withoutEvents: Array.from(document.querySelectorAll('input[name="withoutEvents"]:checked')).map(cb => cb.value)
             };
             
@@ -570,8 +558,8 @@
                 return;
             }
             
-            if (data.eventTypes.length === 0 && data.categories.length === 0) {
-                showError('Пожалуйста, выберите хотя бы один тип события или категорию');
+            if (data.eventTypes.length === 0) {
+                showError('Пожалуйста, выберите хотя бы один тип события');
                 return;
             }
             
@@ -782,7 +770,6 @@
         
         // Load data on page load
         loadEventTypes();
-        loadCategories();
     </script>
 </body>
 </html>
