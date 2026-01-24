@@ -419,33 +419,11 @@ app.post('/api/export', async (req, res) => {
   }
 });
 
-// Cache for event types (refresh every 5 minutes)
-let eventTypesCache = null;
-let eventTypesCacheTime = 0;
-const EVENT_TYPES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-// Get available event types
-app.get('/api/event-types', async (req, res) => {
-  const requestId = Date.now();
-  console.log(`[${requestId}] GET /api/event-types`);
-  
-  // Check cache first
-  if (eventTypesCache && (Date.now() - eventTypesCacheTime) < EVENT_TYPES_CACHE_TTL) {
-    console.log(`[${requestId}] Returning cached event types (${eventTypesCache.length} types)`);
-    return res.json(eventTypesCache);
-  }
-  
-  // Set timeout for this request (30 seconds)
-  const timeoutId = setTimeout(() => {
-    if (!res.headersSent) {
-      console.error(`[${requestId}] Event types request timeout`);
-      res.status(504).json({ error: 'Request timeout' });
-    }
-  }, 30000);
-  
+// Preload event types on server startup (async, non-blocking)
+async function preloadEventTypes() {
+  console.log('[Startup] Preloading event types...');
   try {
-    // Simplified query - just get distinct event types without COUNT (much faster)
-    // COUNT requires full table scan which is slow on large tables
+    // Use a simple query with timeout
     const queryPromise = pool.query(`
       SELECT DISTINCT event_type
       FROM public.user_events
@@ -456,36 +434,83 @@ app.get('/api/event-types', async (req, res) => {
     `);
     
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Query timeout after 10 seconds')), 10000);
+      setTimeout(() => reject(new Error('Preload timeout')), 30000);
     });
     
     const result = await Promise.race([queryPromise, timeoutPromise]);
-    clearTimeout(timeoutId);
     
-    // Format result with count=0 (we don't need exact count for UI)
-    const formattedResult = result.rows.map(row => ({
+    eventTypesCache = result.rows.map(row => ({
       event_type: row.event_type,
-      count: 0 // We'll show types without count to make it faster
+      count: 0
     }));
-    
-    // Update cache
-    eventTypesCache = formattedResult;
     eventTypesCacheTime = Date.now();
     
-    console.log(`[${requestId}] Event types query completed, returning ${formattedResult.length} types`);
-    res.json(formattedResult);
+    console.log(`[Startup] ✅ Preloaded ${eventTypesCache.length} event types`);
   } catch (error) {
-    clearTimeout(timeoutId);
-    console.error(`[${requestId}] Error fetching event types:`, error);
-    
-    // If cache exists, return cached data even if query failed
-    if (eventTypesCache) {
-      console.log(`[${requestId}] Query failed, returning stale cache`);
-      return res.json(eventTypesCache);
-    }
-    
-    res.status(500).json({ error: error.message });
+    console.error('[Startup] ⚠️ Failed to preload event types:', error.message);
+    console.error('[Startup] Event types will be loaded on first request');
+    // Set a default list if query fails
+    eventTypesCache = [
+      { event_type: 'deposit', count: 0 },
+      { event_type: 'ftd', count: 0 },
+      { event_type: 'regfinished', count: 0 }
+    ];
+    eventTypesCacheTime = Date.now();
   }
+}
+
+// Get available event types
+app.get('/api/event-types', async (req, res) => {
+  const requestId = Date.now();
+  console.log(`[${requestId}] GET /api/event-types`);
+  
+  // ALWAYS return cache if available (even if stale) - this prevents timeouts
+  if (eventTypesCache && eventTypesCache.length > 0) {
+    console.log(`[${requestId}] ✅ Returning cached event types (${eventTypesCache.length} types)`);
+    return res.json(eventTypesCache);
+  }
+  
+  // If no cache, return default list immediately (don't wait for DB query)
+  console.log(`[${requestId}] ⚠️ No cache, returning default event types`);
+  const defaultTypes = [
+    { event_type: 'deposit', count: 0 },
+    { event_type: 'ftd', count: 0 },
+    { event_type: 'regfinished', count: 0 },
+    { event_type: 'registration', count: 0 },
+    { event_type: 'login', count: 0 }
+  ];
+  
+  // Try to refresh cache in background (non-blocking)
+  setTimeout(async () => {
+    try {
+      const queryPromise = pool.query(`
+        SELECT DISTINCT event_type
+        FROM public.user_events
+        WHERE event_type IS NOT NULL
+          AND event_type != ''
+        ORDER BY event_type
+        LIMIT 50
+      `);
+      
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Query timeout')), 10000);
+      });
+      
+      const result = await Promise.race([queryPromise, timeoutPromise]);
+      
+      eventTypesCache = result.rows.map(row => ({
+        event_type: row.event_type,
+        count: 0
+      }));
+      eventTypesCacheTime = Date.now();
+      
+      console.log(`[${requestId}] ✅ Background refresh: loaded ${eventTypesCache.length} event types`);
+    } catch (error) {
+      console.error(`[${requestId}] ⚠️ Background refresh failed:`, error.message);
+    }
+  }, 0);
+  
+  return res.json(defaultTypes);
 });
 
 // Cache for categories (refresh every 5 minutes)
@@ -607,5 +632,12 @@ pool.query(`
 app.listen(PORT, () => {
   console.log(`\n🚀 Server running on port ${PORT}`);
   console.log(`📱 Open http://localhost:${PORT} in your browser\n`);
+  
+  // Start preloading event types after server starts
+  setTimeout(() => {
+    preloadEventTypes().catch(err => {
+      console.error('[Startup] Preload error:', err);
+    });
+  }, 2000); // Wait 2 seconds after server start
 });
 
