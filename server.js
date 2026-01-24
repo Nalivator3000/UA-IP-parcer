@@ -419,10 +419,21 @@ app.post('/api/export', async (req, res) => {
   }
 });
 
+// Cache for event types (refresh every 5 minutes)
+let eventTypesCache = null;
+let eventTypesCacheTime = 0;
+const EVENT_TYPES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // Get available event types
 app.get('/api/event-types', async (req, res) => {
   const requestId = Date.now();
   console.log(`[${requestId}] GET /api/event-types`);
+  
+  // Check cache first
+  if (eventTypesCache && (Date.now() - eventTypesCacheTime) < EVENT_TYPES_CACHE_TTL) {
+    console.log(`[${requestId}] Returning cached event types (${eventTypesCache.length} types)`);
+    return res.json(eventTypesCache);
+  }
   
   // Set timeout for this request (30 seconds)
   const timeoutId = setTimeout(() => {
@@ -433,33 +444,59 @@ app.get('/api/event-types', async (req, res) => {
   }, 30000);
   
   try {
+    // Optimized query with LIMIT and faster execution
     const queryPromise = pool.query(`
       SELECT DISTINCT event_type, COUNT(*) as count
       FROM public.user_events
+      WHERE event_type IS NOT NULL
+        AND event_type != ''
       GROUP BY event_type
       ORDER BY count DESC
+      LIMIT 50
     `);
     
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Query timeout after 25 seconds')), 25000);
+      setTimeout(() => reject(new Error('Query timeout after 20 seconds')), 20000);
     });
     
     const result = await Promise.race([queryPromise, timeoutPromise]);
     clearTimeout(timeoutId);
+    
+    // Update cache
+    eventTypesCache = result.rows;
+    eventTypesCacheTime = Date.now();
     
     console.log(`[${requestId}] Event types query completed, returning ${result.rows.length} types`);
     res.json(result.rows);
   } catch (error) {
     clearTimeout(timeoutId);
     console.error(`[${requestId}] Error fetching event types:`, error);
+    
+    // If cache exists, return cached data even if query failed
+    if (eventTypesCache) {
+      console.log(`[${requestId}] Query failed, returning stale cache`);
+      return res.json(eventTypesCache);
+    }
+    
     res.status(500).json({ error: error.message });
   }
 });
+
+// Cache for categories (refresh every 5 minutes)
+let categoriesCache = null;
+let categoriesCacheTime = 0;
+const CATEGORIES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // Get available categories (advertisers)
 app.get('/api/categories', async (req, res) => {
   const requestId = Date.now();
   console.log(`[${requestId}] GET /api/categories`);
+  
+  // Check cache first
+  if (categoriesCache && (Date.now() - categoriesCacheTime) < CATEGORIES_CACHE_TTL) {
+    console.log(`[${requestId}] Returning cached categories (${categoriesCache.length} categories)`);
+    return res.json(categoriesCache);
+  }
   
   // Set timeout for this request (30 seconds)
   const timeoutId = setTimeout(() => {
@@ -470,26 +507,40 @@ app.get('/api/categories', async (req, res) => {
   }, 30000);
   
   try {
+    // Optimized query with LIMIT
     const queryPromise = pool.query(`
       SELECT DISTINCT advertiser, COUNT(*) as count
       FROM public.user_events
       WHERE advertiser IS NOT NULL
+        AND advertiser != ''
       GROUP BY advertiser
       ORDER BY count DESC
+      LIMIT 50
     `);
     
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Query timeout after 25 seconds')), 25000);
+      setTimeout(() => reject(new Error('Query timeout after 20 seconds')), 20000);
     });
     
     const result = await Promise.race([queryPromise, timeoutPromise]);
     clearTimeout(timeoutId);
+    
+    // Update cache
+    categoriesCache = result.rows;
+    categoriesCacheTime = Date.now();
     
     console.log(`[${requestId}] Categories query completed, returning ${result.rows.length} categories`);
     res.json(result.rows);
   } catch (error) {
     clearTimeout(timeoutId);
     console.error(`[${requestId}] Error fetching categories:`, error);
+    
+    // If cache exists, return cached data even if query failed
+    if (categoriesCache) {
+      console.log(`[${requestId}] Query failed, returning stale cache`);
+      return res.json(categoriesCache);
+    }
+    
     res.status(500).json({ error: error.message });
   }
 });
