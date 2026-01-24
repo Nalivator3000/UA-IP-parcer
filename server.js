@@ -232,7 +232,14 @@ app.post('/api/export', async (req, res) => {
     `;
     
     console.log(`[Server] Checking if columns exist...`);
-    const columnsResult = await pool.query(checkColumnsQuery);
+    
+    // Add query timeout wrapper
+    const columnsQueryPromise = pool.query(checkColumnsQuery);
+    const columnsQueryTimeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`Columns check timeout after 30 seconds`)), 30000);
+    });
+    
+    const columnsResult = await Promise.race([columnsQueryPromise, columnsQueryTimeoutPromise]);
     const existingColumns = columnsResult.rows.map(row => row.column_name);
     const hasUserAgent = existingColumns.includes('user_agent');
     const hasIpAddress = existingColumns.includes('ip_address');
