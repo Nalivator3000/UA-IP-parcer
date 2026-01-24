@@ -536,9 +536,9 @@
                 let addedCount = 0;
                 data.forEach(item => {
                     if (item && item.event_type) {
-                        const count = item.count ? item.count.toLocaleString() : '0';
-                        const label1 = `${item.event_type} (${count})`;
-                        const label2 = `${item.event_type} (${count})`;
+                        // Show event type without count to make it faster
+                        const label1 = item.event_type;
+                        const label2 = item.event_type;
                         
                         const checkbox1 = createCheckbox('eventTypes', item.event_type, label1);
                         const checkbox2 = createCheckbox('withoutEvents', item.event_type, label2);

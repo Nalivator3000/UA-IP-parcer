@@ -444,30 +444,36 @@ app.get('/api/event-types', async (req, res) => {
   }, 30000);
   
   try {
-    // Optimized query with LIMIT and faster execution
+    // Simplified query - just get distinct event types without COUNT (much faster)
+    // COUNT requires full table scan which is slow on large tables
     const queryPromise = pool.query(`
-      SELECT DISTINCT event_type, COUNT(*) as count
+      SELECT DISTINCT event_type
       FROM public.user_events
       WHERE event_type IS NOT NULL
         AND event_type != ''
-      GROUP BY event_type
-      ORDER BY count DESC
+      ORDER BY event_type
       LIMIT 50
     `);
     
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Query timeout after 20 seconds')), 20000);
+      setTimeout(() => reject(new Error('Query timeout after 10 seconds')), 10000);
     });
     
     const result = await Promise.race([queryPromise, timeoutPromise]);
     clearTimeout(timeoutId);
     
+    // Format result with count=0 (we don't need exact count for UI)
+    const formattedResult = result.rows.map(row => ({
+      event_type: row.event_type,
+      count: 0 // We'll show types without count to make it faster
+    }));
+    
     // Update cache
-    eventTypesCache = result.rows;
+    eventTypesCache = formattedResult;
     eventTypesCacheTime = Date.now();
     
-    console.log(`[${requestId}] Event types query completed, returning ${result.rows.length} types`);
-    res.json(result.rows);
+    console.log(`[${requestId}] Event types query completed, returning ${formattedResult.length} types`);
+    res.json(formattedResult);
   } catch (error) {
     clearTimeout(timeoutId);
     console.error(`[${requestId}] Error fetching event types:`, error);
@@ -507,30 +513,35 @@ app.get('/api/categories', async (req, res) => {
   }, 30000);
   
   try {
-    // Optimized query with LIMIT
+    // Simplified query - just get distinct advertisers without COUNT (much faster)
     const queryPromise = pool.query(`
-      SELECT DISTINCT advertiser, COUNT(*) as count
+      SELECT DISTINCT advertiser
       FROM public.user_events
       WHERE advertiser IS NOT NULL
         AND advertiser != ''
-      GROUP BY advertiser
-      ORDER BY count DESC
+      ORDER BY advertiser
       LIMIT 50
     `);
     
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Query timeout after 20 seconds')), 20000);
+      setTimeout(() => reject(new Error('Query timeout after 10 seconds')), 10000);
     });
     
     const result = await Promise.race([queryPromise, timeoutPromise]);
     clearTimeout(timeoutId);
     
+    // Format result with count=0
+    const formattedResult = result.rows.map(row => ({
+      advertiser: row.advertiser,
+      count: 0
+    }));
+    
     // Update cache
-    categoriesCache = result.rows;
+    categoriesCache = formattedResult;
     categoriesCacheTime = Date.now();
     
-    console.log(`[${requestId}] Categories query completed, returning ${result.rows.length} categories`);
-    res.json(result.rows);
+    console.log(`[${requestId}] Categories query completed, returning ${formattedResult.length} categories`);
+    res.json(formattedResult);
   } catch (error) {
     clearTimeout(timeoutId);
     console.error(`[${requestId}] Error fetching categories:`, error);
