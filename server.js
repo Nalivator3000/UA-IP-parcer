@@ -610,25 +610,30 @@ setTimeout(() => {
       console.log('✅ Database connection successful');
       console.log('   Server time:', res.rows[0].now);
       
-      // Check if required columns exist
+      // Check ALL columns in user_events table
       pool.query(`
-        SELECT column_name 
+        SELECT column_name, data_type, is_nullable
         FROM information_schema.columns 
         WHERE table_schema = 'public' 
-          AND table_name = 'user_events' 
-          AND column_name IN ('user_agent', 'ip_address')
+          AND table_name = 'user_events'
+        ORDER BY ordinal_position
       `, (err, res) => {
         if (err) {
           console.error('⚠️  Failed to check columns:', err.message);
         } else {
           const columns = res.rows.map(row => row.column_name);
-          console.log('📊 Available columns in user_events:', columns);
+          console.log(`📊 All columns in user_events (${columns.length} total):`);
+          res.rows.forEach(row => {
+            console.log(`   - ${row.column_name} (${row.data_type}, nullable: ${row.is_nullable})`);
+          });
+          
+          // Check specifically for user_agent and ip_address
           if (columns.includes('user_agent') && columns.includes('ip_address')) {
             console.log('✅ Required columns (user_agent, ip_address) are present');
           } else {
             console.log('⚠️  WARNING: Missing columns!');
             console.log('   user_agent:', columns.includes('user_agent') ? '✅' : '❌');
-            console.log('   ip_address:', columns.includes('ip_address') ? '✅' : '❌');
+            console.log('   ip_address:', columns.includes('ip_address') ? '❌' : '❌');
           }
         }
       });
