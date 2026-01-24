@@ -270,12 +270,18 @@
         }
         
         .loading {
-            display: none;
-            margin-top: 24px;
-            padding: 20px;
+            display: block;
+            margin-top: 12px;
+            padding: 12px 16px;
             background: rgba(37, 99, 235, 0.05);
             border-radius: var(--radius-md);
             border: 1px solid rgba(37, 99, 235, 0.2);
+            color: var(--primary);
+            font-size: 0.875rem;
+        }
+        
+        .loading.hidden {
+            display: none;
         }
         
         .loading-content {
@@ -484,40 +490,88 @@
             const container = document.getElementById('eventTypesContainer');
             const withoutContainer = document.getElementById('withoutEventsContainer');
             
+            if (!container || !withoutContainer) {
+                console.error('Containers not found!');
+                return;
+            }
+            
+            // Show loading state
+            container.innerHTML = '<div class="loading">⏳ Загрузка типов событий...</div>';
+            withoutContainer.innerHTML = '<div class="loading">⏳ Загрузка типов событий...</div>';
+            
             try {
-                container.innerHTML = '<div class="loading">Загрузка типов событий...</div>';
-                withoutContainer.innerHTML = '<div class="loading">Загрузка типов событий...</div>';
+                console.log('[LoadEvents] Fetching event types from /api/event-types...');
+                const response = await fetch('/api/event-types', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    },
+                    // Add timeout
+                    signal: AbortSignal.timeout(30000) // 30 seconds
+                });
                 
-                const response = await fetch('/api/event-types');
+                console.log('[LoadEvents] Response status:', response.status);
+                
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    const errorText = await response.text();
+                    console.error('[LoadEvents] HTTP error:', response.status, errorText);
+                    throw new Error(`HTTP ${response.status}: ${errorText || 'Ошибка сервера'}`);
                 }
-                const data = await response.json();
                 
-                if (!data || data.length === 0) {
-                    container.innerHTML = '<div class="error" style="display:block; padding:12px; color:var(--error);">Типы событий не найдены</div>';
-                    withoutContainer.innerHTML = '<div class="error" style="display:block; padding:12px; color:var(--error);">Типы событий не найдены</div>';
-                    console.error('No event types received');
+                const data = await response.json();
+                console.log('[LoadEvents] Received data:', data);
+                
+                if (!data || !Array.isArray(data) || data.length === 0) {
+                    console.warn('[LoadEvents] No event types received or empty array');
+                    container.innerHTML = '<div class="error" style="display:block; padding:12px; color:var(--error); border:1px solid var(--error); border-radius:var(--radius-md);">⚠️ Типы событий не найдены в базе данных</div>';
+                    withoutContainer.innerHTML = '<div class="error" style="display:block; padding:12px; color:var(--error); border:1px solid var(--error); border-radius:var(--radius-md);">⚠️ Типы событий не найдены в базе данных</div>';
                     return;
                 }
                 
+                // Clear containers
                 container.innerHTML = '';
                 withoutContainer.innerHTML = '';
                 
+                // Create checkboxes
+                let addedCount = 0;
                 data.forEach(item => {
-                    if (item.event_type) {
-                        const checkbox1 = createCheckbox('eventTypes', item.event_type, `${item.event_type} (${item.count ? item.count.toLocaleString() : 0})`);
-                        const checkbox2 = createCheckbox('withoutEvents', item.event_type, `${item.event_type} (${item.count ? item.count.toLocaleString() : 0})`);
+                    if (item && item.event_type) {
+                        const count = item.count ? item.count.toLocaleString() : '0';
+                        const label1 = `${item.event_type} (${count})`;
+                        const label2 = `${item.event_type} (${count})`;
+                        
+                        const checkbox1 = createCheckbox('eventTypes', item.event_type, label1);
+                        const checkbox2 = createCheckbox('withoutEvents', item.event_type, label2);
+                        
                         container.appendChild(checkbox1);
                         withoutContainer.appendChild(checkbox2);
+                        addedCount++;
                     }
                 });
                 
-                console.log(`Loaded ${data.length} event types`);
+                console.log(`[LoadEvents] Successfully loaded ${addedCount} event types`);
+                
+                if (addedCount === 0) {
+                    container.innerHTML = '<div class="error" style="display:block; padding:12px; color:var(--error); border:1px solid var(--error); border-radius:var(--radius-md);">⚠️ Не удалось загрузить типы событий</div>';
+                    withoutContainer.innerHTML = '<div class="error" style="display:block; padding:12px; color:var(--error); border:1px solid var(--error); border-radius:var(--radius-md);">⚠️ Не удалось загрузить типы событий</div>';
+                }
             } catch (error) {
-                console.error('Error loading event types:', error);
-                container.innerHTML = `<div class="error" style="display:block; padding:12px; color:var(--error);">Ошибка загрузки типов событий: ${error.message}</div>`;
-                withoutContainer.innerHTML = `<div class="error" style="display:block; padding:12px; color:var(--error);">Ошибка загрузки типов событий: ${error.message}</div>`;
+                console.error('[LoadEvents] Error loading event types:', error);
+                const errorMessage = error.name === 'TimeoutError' 
+                    ? 'Таймаут при загрузке. Проверьте подключение к серверу.'
+                    : error.message || 'Неизвестная ошибка';
+                
+                const errorHtml = `
+                    <div class="error" style="display:block; padding:12px; color:var(--error); border:1px solid var(--error); border-radius:var(--radius-md); margin-bottom:8px;">
+                        ⚠️ Ошибка загрузки типов событий: ${errorMessage}
+                    </div>
+                    <button onclick="loadEventTypes()" style="padding:8px 16px; background:var(--primary); color:white; border:none; border-radius:var(--radius-md); cursor:pointer; font-size:0.875rem;">
+                        🔄 Повторить загрузку
+                    </button>
+                `;
+                
+                container.innerHTML = errorHtml;
+                withoutContainer.innerHTML = errorHtml;
             }
         }
         
