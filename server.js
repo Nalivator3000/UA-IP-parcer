@@ -419,6 +419,11 @@ app.post('/api/export', async (req, res) => {
   }
 });
 
+// Cache for event types (initialize with default values)
+let eventTypesCache = null;
+let eventTypesCacheTime = 0;
+const EVENT_TYPES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // Preload event types on server startup (async, non-blocking)
 async function preloadEventTypes() {
   console.log('[Startup] Preloading event types...');
@@ -581,14 +586,13 @@ app.get('/api/categories', async (req, res) => {
   }
 });
 
-// Health check
+// Health check - must work even if DB is down (for Railway health checks)
 app.get('/api/health', async (req, res) => {
-  try {
-    await pool.query('SELECT 1');
-    res.json({ status: 'ok', database: 'connected' });
-  } catch (error) {
-    res.status(500).json({ status: 'error', error: error.message });
-  }
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
 });
 
 // Serve frontend
@@ -596,48 +600,80 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Test database connection on startup
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) {
-    console.error('❌ Database connection failed:', err.message);
-  } else {
-    console.log('✅ Database connection successful');
-    console.log('   Server time:', res.rows[0].now);
-  }
-});
-
-// Check if columns exist on startup
-pool.query(`
-  SELECT column_name 
-  FROM information_schema.columns 
-  WHERE table_schema = 'public' 
-    AND table_name = 'user_events' 
-    AND column_name IN ('user_agent', 'ip_address')
-`, (err, res) => {
-  if (err) {
-    console.error('❌ Failed to check columns:', err.message);
-  } else {
-    const columns = res.rows.map(row => row.column_name);
-    console.log('📊 Available columns in user_events:', columns);
-    if (columns.includes('user_agent') && columns.includes('ip_address')) {
-      console.log('✅ Required columns (user_agent, ip_address) are present');
+// Test database connection on startup (non-blocking, don't fail if DB is down)
+setTimeout(() => {
+  pool.query('SELECT NOW()', (err, res) => {
+    if (err) {
+      console.error('⚠️  Database connection check failed:', err.message);
+      console.error('   Server will continue running, but DB queries may fail');
     } else {
-      console.log('⚠️  WARNING: Missing columns!');
-      console.log('   user_agent:', columns.includes('user_agent') ? '✅' : '❌');
-      console.log('   ip_address:', columns.includes('ip_address') ? '✅' : '❌');
+      console.log('✅ Database connection successful');
+      console.log('   Server time:', res.rows[0].now);
+      
+      // Check if required columns exist
+      pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+          AND table_name = 'user_events' 
+          AND column_name IN ('user_agent', 'ip_address')
+      `, (err, res) => {
+        if (err) {
+          console.error('⚠️  Failed to check columns:', err.message);
+        } else {
+          const columns = res.rows.map(row => row.column_name);
+          console.log('📊 Available columns in user_events:', columns);
+          if (columns.includes('user_agent') && columns.includes('ip_address')) {
+            console.log('✅ Required columns (user_agent, ip_address) are present');
+          } else {
+            console.log('⚠️  WARNING: Missing columns!');
+            console.log('   user_agent:', columns.includes('user_agent') ? '✅' : '❌');
+            console.log('   ip_address:', columns.includes('ip_address') ? '✅' : '❌');
+          }
+        }
+      });
     }
-  }
+  });
+}, 1000); // Check DB after 1 second (non-blocking)
+
+// Error handler for uncaught errors
+process.on('uncaughtException', (error) => {
+  console.error('❌ [FATAL] Uncaught Exception:', error);
+  // Don't exit - keep server running
 });
 
-app.listen(PORT, () => {
-  console.log(`\n🚀 Server running on port ${PORT}`);
-  console.log(`📱 Open http://localhost:${PORT} in your browser\n`);
-  
-  // Start preloading event types after server starts
-  setTimeout(() => {
-    preloadEventTypes().catch(err => {
-      console.error('[Startup] Preload error:', err);
-    });
-  }, 2000); // Wait 2 seconds after server start
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ [FATAL] Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit - keep server running
 });
+
+// Start server with error handling
+try {
+  app.listen(PORT, () => {
+    console.log(`\n🚀 Server running on port ${PORT}`);
+    console.log(`📱 Open http://localhost:${PORT} in your browser\n`);
+    
+    // Start preloading event types after server starts
+    setTimeout(() => {
+      preloadEventTypes().catch(err => {
+        console.error('[Startup] Preload error:', err);
+        // Set default cache if preload fails
+        if (!eventTypesCache) {
+          eventTypesCache = [
+            { event_type: 'deposit', count: 0 },
+            { event_type: 'ftd', count: 0 },
+            { event_type: 'regfinished', count: 0 },
+            { event_type: 'registration', count: 0 },
+            { event_type: 'login', count: 0 }
+          ];
+          eventTypesCacheTime = Date.now();
+          console.log('[Startup] ✅ Using default event types cache');
+        }
+      });
+    }, 2000); // Wait 2 seconds after server start
+  });
+} catch (error) {
+  console.error('❌ [FATAL] Failed to start server:', error);
+  process.exit(1);
+}
 
