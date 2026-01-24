@@ -421,33 +421,75 @@ app.post('/api/export', async (req, res) => {
 
 // Get available event types
 app.get('/api/event-types', async (req, res) => {
+  const requestId = Date.now();
+  console.log(`[${requestId}] GET /api/event-types`);
+  
+  // Set timeout for this request (30 seconds)
+  const timeoutId = setTimeout(() => {
+    if (!res.headersSent) {
+      console.error(`[${requestId}] Event types request timeout`);
+      res.status(504).json({ error: 'Request timeout' });
+    }
+  }, 30000);
+  
   try {
-    const result = await pool.query(`
+    const queryPromise = pool.query(`
       SELECT DISTINCT event_type, COUNT(*) as count
       FROM public.user_events
       GROUP BY event_type
       ORDER BY count DESC
     `);
+    
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Query timeout after 25 seconds')), 25000);
+    });
+    
+    const result = await Promise.race([queryPromise, timeoutPromise]);
+    clearTimeout(timeoutId);
+    
+    console.log(`[${requestId}] Event types query completed, returning ${result.rows.length} types`);
     res.json(result.rows);
   } catch (error) {
-    console.error('Error fetching event types:', error);
+    clearTimeout(timeoutId);
+    console.error(`[${requestId}] Error fetching event types:`, error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // Get available categories (advertisers)
 app.get('/api/categories', async (req, res) => {
+  const requestId = Date.now();
+  console.log(`[${requestId}] GET /api/categories`);
+  
+  // Set timeout for this request (30 seconds)
+  const timeoutId = setTimeout(() => {
+    if (!res.headersSent) {
+      console.error(`[${requestId}] Categories request timeout`);
+      res.status(504).json({ error: 'Request timeout' });
+    }
+  }, 30000);
+  
   try {
-    const result = await pool.query(`
+    const queryPromise = pool.query(`
       SELECT DISTINCT advertiser, COUNT(*) as count
       FROM public.user_events
       WHERE advertiser IS NOT NULL
       GROUP BY advertiser
       ORDER BY count DESC
     `);
+    
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Query timeout after 25 seconds')), 25000);
+    });
+    
+    const result = await Promise.race([queryPromise, timeoutPromise]);
+    clearTimeout(timeoutId);
+    
+    console.log(`[${requestId}] Categories query completed, returning ${result.rows.length} categories`);
     res.json(result.rows);
   } catch (error) {
-    console.error('Error fetching categories:', error);
+    clearTimeout(timeoutId);
+    console.error(`[${requestId}] Error fetching categories:`, error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -481,23 +481,43 @@
     <script>
         // Load event types and categories on page load
         async function loadEventTypes() {
+            const container = document.getElementById('eventTypesContainer');
+            const withoutContainer = document.getElementById('withoutEventsContainer');
+            
             try {
+                container.innerHTML = '<div class="loading">Загрузка типов событий...</div>';
+                withoutContainer.innerHTML = '<div class="loading">Загрузка типов событий...</div>';
+                
                 const response = await fetch('/api/event-types');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 const data = await response.json();
-                const container = document.getElementById('eventTypesContainer');
-                const withoutContainer = document.getElementById('withoutEventsContainer');
+                
+                if (!data || data.length === 0) {
+                    container.innerHTML = '<div class="error" style="display:block; padding:12px; color:var(--error);">Типы событий не найдены</div>';
+                    withoutContainer.innerHTML = '<div class="error" style="display:block; padding:12px; color:var(--error);">Типы событий не найдены</div>';
+                    console.error('No event types received');
+                    return;
+                }
                 
                 container.innerHTML = '';
                 withoutContainer.innerHTML = '';
                 
                 data.forEach(item => {
-                    const checkbox1 = createCheckbox('eventTypes', item.event_type, `${item.event_type} (${item.count.toLocaleString()})`);
-                    const checkbox2 = createCheckbox('withoutEvents', item.event_type, `${item.event_type} (${item.count.toLocaleString()})`);
-                    container.appendChild(checkbox1);
-                    withoutContainer.appendChild(checkbox2);
+                    if (item.event_type) {
+                        const checkbox1 = createCheckbox('eventTypes', item.event_type, `${item.event_type} (${item.count ? item.count.toLocaleString() : 0})`);
+                        const checkbox2 = createCheckbox('withoutEvents', item.event_type, `${item.event_type} (${item.count ? item.count.toLocaleString() : 0})`);
+                        container.appendChild(checkbox1);
+                        withoutContainer.appendChild(checkbox2);
+                    }
                 });
+                
+                console.log(`Loaded ${data.length} event types`);
             } catch (error) {
                 console.error('Error loading event types:', error);
+                container.innerHTML = `<div class="error" style="display:block; padding:12px; color:var(--error);">Ошибка загрузки типов событий: ${error.message}</div>`;
+                withoutContainer.innerHTML = `<div class="error" style="display:block; padding:12px; color:var(--error);">Ошибка загрузки типов событий: ${error.message}</div>`;
             }
         }
         
@@ -555,6 +575,14 @@
             // Validation
             if (!data.startDate || !data.endDate) {
                 showError('Пожалуйста, выберите период');
+                return;
+            }
+            
+            // Проверка дат
+            const startDate = new Date(data.startDate);
+            const endDate = new Date(data.endDate);
+            if (startDate > endDate) {
+                showError('Дата начала не может быть позже даты окончания');
                 return;
             }
             
