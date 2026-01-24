@@ -7,10 +7,19 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// PostgreSQL connection pool
+// PostgreSQL connection pool with timeout settings
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://postgres:SriKJuzBhROvpXTloDLNQieJgAedbaAq@yamabiko.proxy.rlwy.net:47136/railway',
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+  // Timeout settings
+  connectionTimeoutMillis: 10000, // 10 seconds to connect
+  query_timeout: 300000, // 5 minutes for queries (300 seconds)
+  statement_timeout: 300000, // 5 minutes for statements
+  idle_in_transaction_session_timeout: 300000, // 5 minutes
+  // Pool settings
+  max: 10, // Maximum number of clients in the pool
+  min: 2, // Minimum number of clients in the pool
+  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
 });
 
 // Middleware
@@ -79,6 +88,19 @@ app.post('/api/export', async (req, res) => {
   const requestId = Date.now();
   console.log(`[${requestId}] ====== NEW EXPORT REQUEST ======`);
   console.log(`[${requestId}] Request params:`, JSON.stringify(req.body, null, 2));
+  
+  // Set overall request timeout (10 minutes)
+  const REQUEST_TIMEOUT = 600000; // 10 minutes
+  const timeoutId = setTimeout(() => {
+    if (!res.headersSent) {
+      console.error(`[${requestId}] Request timeout after ${REQUEST_TIMEOUT}ms`);
+      res.status(504).json({ error: 'Request timeout. The export is taking too long. Try reducing the date range or number of users.' });
+    }
+  }, REQUEST_TIMEOUT);
+  
+  // Cleanup timeout on response end
+  res.on('finish', () => clearTimeout(timeoutId));
+  res.on('close', () => clearTimeout(timeoutId));
   
   try {
     const params = req.body;
@@ -174,7 +196,14 @@ app.post('/api/export', async (req, res) => {
     // Execute query to get user IDs
     console.log(`[${requestId}] Executing user query...`);
     const queryStartTime = Date.now();
-    const userResult = await pool.query(userQuery, whereData.values);
+    
+    // Add query timeout wrapper
+    const userQueryPromise = pool.query(userQuery, whereData.values);
+    const userQueryTimeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`User query timeout after 60 seconds`)), 60000);
+    });
+    
+    const userResult = await Promise.race([userQueryPromise, userQueryTimeoutPromise]);
     const queryTime = Date.now() - queryStartTime;
     console.log(`[${requestId}] User query executed in ${queryTime}ms`);
     console.log(`[${requestId}] User query returned ${userResult.rows.length} rows`);
@@ -254,7 +283,14 @@ app.post('/api/export', async (req, res) => {
           console.log(`[Server] Batch ${batchNum}: Sample user IDs:`, batch.slice(0, 3));
           
           const batchQueryStartTime = Date.now();
-          const batchResult = await pool.query(batchQuery, batch);
+          
+          // Add query timeout wrapper
+          const queryPromise = pool.query(batchQuery, batch);
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error(`Query timeout after 60 seconds`)), 60000);
+          });
+          
+          const batchResult = await Promise.race([queryPromise, timeoutPromise]);
           const batchQueryTime = Date.now() - batchQueryStartTime;
           console.log(`[${requestId}] Batch ${batchNum}: Query executed in ${batchQueryTime}ms, got ${batchResult.rows.length} rows`);
           
@@ -334,6 +370,9 @@ app.post('/api/export', async (req, res) => {
     // Send CSV data
     res.write(csvData);
     res.end();
+    
+    // Clear timeout on successful completion
+    clearTimeout(timeoutId);
 
   } catch (error) {
     const requestId = req.requestId || Date.now();
@@ -350,6 +389,9 @@ app.post('/api/export', async (req, res) => {
     if (error.hint) {
       console.error(`[${requestId}] PostgreSQL error hint:`, error.hint);
     }
+    
+    // Clear timeout on error
+    clearTimeout(timeoutId);
     
     // Try to send error to client if response is still writable
     try {
