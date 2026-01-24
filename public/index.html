@@ -431,7 +431,7 @@
                 <div class="form-group">
                     <label>Выберите типы событий для фильтрации:</label>
                     <div class="checkbox-group" id="eventTypesContainer">
-                        <div class="loading">Загрузка типов событий...</div>
+                        <!-- События загружаются динамически -->
                     </div>
                 </div>
             </div>
@@ -457,7 +457,7 @@
                 <div class="form-group">
                     <label>Пользователи, у которых НЕТ этих событий (например, регистрации без депозитов):</label>
                     <div class="checkbox-group" id="withoutEventsContainer">
-                        <div class="loading">Загрузка типов событий...</div>
+                        <!-- События загружаются динамически -->
                     </div>
                 </div>
             </div>
@@ -851,7 +851,25 @@
         document.getElementById('startDate').value = thirtyDaysAgo.toISOString().split('T')[0];
         
         // Load data on page load
-        loadEventTypes();
+        // Wait for DOM to be fully loaded
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                console.log('[Init] DOM loaded, starting loadEventTypes...');
+                loadEventTypes();
+            });
+        } else {
+            console.log('[Init] DOM already loaded, starting loadEventTypes...');
+            loadEventTypes();
+        }
+        
+        // Also try to load after a short delay (fallback)
+        setTimeout(() => {
+            const container = document.getElementById('eventTypesContainer');
+            if (container && (container.children.length === 0 || container.querySelector('.loading'))) {
+                console.log('[Init] Containers still empty or loading, retrying loadEventTypes...');
+                loadEventTypes();
+            }
+        }, 2000);
     </script>
 </body>
 </html>
