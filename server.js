@@ -7,6 +7,11 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Cache for event types (initialize with default values) - MUST be declared before routes
+let eventTypesCache = null;
+let eventTypesCacheTime = 0;
+const EVENT_TYPES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 // PostgreSQL connection pool with timeout settings
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://postgres:SriKJuzBhROvpXTloDLNQieJgAedbaAq@yamabiko.proxy.rlwy.net:47136/railway',
@@ -418,11 +423,6 @@ app.post('/api/export', async (req, res) => {
     }
   }
 });
-
-// Cache for event types (initialize with default values)
-let eventTypesCache = null;
-let eventTypesCacheTime = 0;
-const EVENT_TYPES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // Preload event types on server startup (async, non-blocking)
 async function preloadEventTypes() {
