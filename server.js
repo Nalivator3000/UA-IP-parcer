@@ -68,10 +68,17 @@ function buildWhereConditions(params) {
   // Categories (advertiser)
   if (params.categories && params.categories.length > 0) {
     console.log(`[buildWhereConditions] Filtering by advertiser:`, params.categories);
-    const placeholders = params.categories.map((_, i) => `$${paramIndex + i}`).join(', ');
+    // Map old values to new values for backward compatibility
+    const mappedCategories = params.categories.map(cat => {
+      if (cat === '1') return '4rabet';
+      if (cat === '2') return 'Crorebet';
+      return cat;
+    });
+    console.log(`[buildWhereConditions] Mapped advertiser values:`, mappedCategories);
+    const placeholders = mappedCategories.map((_, i) => `$${paramIndex + i}`).join(', ');
     conditions.push(`ue.advertiser IN (${placeholders})`);
-    values.push(...params.categories);
-    paramIndex += params.categories.length;
+    values.push(...mappedCategories);
+    paramIndex += mappedCategories.length;
   } else {
     console.log(`[buildWhereConditions] No advertiser filter applied`);
   }
