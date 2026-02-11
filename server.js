@@ -225,9 +225,22 @@ app.post('/api/export', async (req, res) => {
         FROM users_in_period uip
         WHERE uip.external_user_id NOT IN (SELECT external_user_id FROM users_with_excluded_events)
       `;
-      
-      whereData.values = periodValues;
-      whereData.values.push(...params.withoutEvents);
+        
+        whereData.values = periodValues;
+        whereData.values.push(...params.withoutEvents);
+      } else {
+        // If all withoutEvents were filtered out, use simple query with period conditions
+        console.log(`[${requestId}] Using simple query without withoutEvents filter`);
+        if (periodConditions.length > 0) {
+          userQuery = `
+            SELECT DISTINCT ue.external_user_id
+            FROM public.user_events ue
+            WHERE ue.external_user_id IS NOT NULL
+              AND ${periodConditions.join(' AND ')}
+          `;
+          whereData.values = periodValues;
+        }
+      }
     }
 
     // Set CSV headers - we'll send progress as JSON lines that client will filter
