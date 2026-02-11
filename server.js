@@ -20,9 +20,7 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
   // Timeout settings (increased to 10 minutes)
   connectionTimeoutMillis: 30000, // 30 seconds to connect
-  query_timeout: 600000, // 10 minutes for queries (600 seconds)
-  statement_timeout: 600000, // 10 minutes for statements
-  idle_in_transaction_session_timeout: 600000, // 10 minutes
+  // Note: query_timeout is not a valid PostgreSQL parameter, only statement_timeout is supported
   // Pool settings
   max: 10, // Maximum number of clients in the pool
   min: 2, // Minimum number of clients in the pool
@@ -161,10 +159,16 @@ app.post('/api/export', async (req, res) => {
       }
       
       if (params.categories && params.categories.length > 0) {
-        const placeholders = params.categories.map((_, i) => `$${periodIndex + i}`).join(', ');
+        // Map old values to new values for backward compatibility
+        const mappedCategories = params.categories.map(cat => {
+          if (cat === '1') return '4rabet';
+          if (cat === '2') return 'Crorebet';
+          return cat;
+        });
+        const placeholders = mappedCategories.map((_, i) => `$${periodIndex + i}`).join(', ');
         periodConditions.push(`ue.advertiser IN (${placeholders})`);
-        periodValues.push(...params.categories);
-        periodIndex += params.categories.length;
+        periodValues.push(...mappedCategories);
+        periodIndex += mappedCategories.length;
       }
       
       // Build query: users with events in period, but WITHOUT excluded events EVER (considering funnel)
@@ -211,8 +215,8 @@ app.post('/api/export', async (req, res) => {
     const client = await pool.connect();
     try {
       // Set timeout for this specific connection
+      // Note: query_timeout is not a valid PostgreSQL parameter, only statement_timeout is supported
       await client.query('SET statement_timeout = 600000'); // 10 minutes
-      await client.query('SET query_timeout = 600000'); // 10 minutes
       await client.query('SET idle_in_transaction_session_timeout = 600000'); // 10 minutes
       
       console.log(`[${requestId}] Timeout settings applied: 10 minutes (600 seconds)`);
