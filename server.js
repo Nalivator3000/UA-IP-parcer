@@ -119,6 +119,12 @@ app.post('/api/export', async (req, res) => {
   
   try {
     const params = req.body;
+    console.log(`[${requestId}] ====== EXPORT REQUEST DETAILS ======`);
+    console.log(`[${requestId}] Event types:`, params.eventTypes);
+    console.log(`[${requestId}] Without events:`, params.withoutEvents);
+    console.log(`[${requestId}] Categories (advertiser):`, params.categories);
+    console.log(`[${requestId}] Date range:`, params.startDate, 'to', params.endDate);
+    console.log(`[${requestId}] Deposit range:`, params.minDeposit, 'to', params.maxDeposit);
 
     // Step 1: Find matching user IDs based on criteria (20% progress)
     let userQuery = `
@@ -129,6 +135,7 @@ app.post('/api/export', async (req, res) => {
 
     const whereData = buildWhereConditions(params);
     console.log(`[${requestId}] WHERE conditions:`, whereData.conditions);
+    console.log(`[${requestId}] WHERE values:`, whereData.values);
     console.log(`[${requestId}] WHERE values count:`, whereData.values.length);
     
     if (whereData.conditions.length > 0) {
