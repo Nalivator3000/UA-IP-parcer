@@ -446,11 +446,11 @@
                         <!-- Статические варианты на случай, если API не работает -->
                         <div class="checkbox-item">
                             <input type="checkbox" name="categories" value="4rabet" id="advertiser_4ra">
-                            <label for="advertiser_4ra">4ra (4rabet)</label>
+                            <label for="advertiser_4ra">4ra</label>
                         </div>
                         <div class="checkbox-item">
                             <input type="checkbox" name="categories" value="Crorebet" id="advertiser_crore">
-                            <label for="advertiser_crore">Crore (Crorebet)</label>
+                            <label for="advertiser_crore">Crore</label>
                         </div>
                     </div>
                     <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 8px;">
@@ -489,7 +489,7 @@
                 Экспортировать CSV
             </button>
             
-            <div class="loading" id="loading">
+            <div class="loading" id="loading" style="display: none;">
                 <div class="loading-content">
                     <div class="loading-text">
                         <span>⏳</span>
@@ -498,7 +498,7 @@
                     <div class="loading-percent" id="loadingPercent">0%</div>
                 </div>
                 <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill"></div>
+                    <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
                 </div>
             </div>
             
@@ -640,7 +640,14 @@
                 // Если API вернул данные, используем их
                 if (data && data.length > 0) {
                     data.forEach(item => {
-                        const checkbox = createCheckbox('categories', item.advertiser, `${item.advertiser} (${item.count.toLocaleString()})`);
+                        // Map advertiser values to display names
+                        let displayName = item.advertiser;
+                        if (item.advertiser === '4rabet') {
+                            displayName = '4ra';
+                        } else if (item.advertiser === 'Crorebet') {
+                            displayName = 'Crore';
+                        }
+                        const checkbox = createCheckbox('categories', item.advertiser, displayName);
                         container.appendChild(checkbox);
                     });
                 } else {
@@ -911,6 +918,25 @@
         
         document.getElementById('endDate').value = today.toISOString().split('T')[0];
         document.getElementById('startDate').value = thirtyDaysAgo.toISOString().split('T')[0];
+        
+        // Initialize progress bar - hide it and reset to 0
+        const loadingEl = document.getElementById('loading');
+        const progressFill = document.getElementById('progressFill');
+        const loadingPercent = document.getElementById('loadingPercent');
+        const loadingMessage = document.getElementById('loadingMessage');
+        
+        if (loadingEl) {
+            loadingEl.style.display = 'none';
+        }
+        if (progressFill) {
+            progressFill.style.width = '0%';
+        }
+        if (loadingPercent) {
+            loadingPercent.textContent = '0%';
+        }
+        if (loadingMessage) {
+            loadingMessage.textContent = 'Обработка запроса...';
+        }
         
         // Load data on page load
         // Wait for DOM to be fully loaded
