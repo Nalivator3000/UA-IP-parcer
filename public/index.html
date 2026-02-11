@@ -847,14 +847,15 @@
                                 try {
                                     const update = JSON.parse(line);
                                     console.log('[Export] Progress update:', update);
+                                    if (update.error) {
+                                        console.error('[Export] Error in progress update:', update.error);
+                                        // Stop processing immediately on error
+                                        throw new Error(update.error);
+                                    }
                                     if (update.progress !== undefined) {
                                         updateProgress(update.progress, update.message || 'Обработка...');
                                         progressReceived = true;
                                         continue;
-                                    }
-                                    if (update.error) {
-                                        console.error('[Export] Error in progress update:', update.error);
-                                        throw new Error(update.error);
                                     }
                                 } catch (e) {
                                     console.warn('[Export] Failed to parse JSON, treating as CSV:', e.message);
