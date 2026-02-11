@@ -281,6 +281,56 @@ app.post('/api/export', async (req, res) => {
       console.log(`[${requestId}] User query executed in ${queryTime}ms`);
       console.log(`[${requestId}] User query returned ${userResult.rows.length} rows`);
       
+      // If no results, try a diagnostic query to see what data exists
+      if (userResult.rows.length === 0) {
+        console.log(`[${requestId}] ====== DIAGNOSTIC QUERY ======`);
+        try {
+          // Check if there are any events matching the date range and event type
+          const diagnosticQuery = `
+            SELECT 
+              COUNT(*) as total_events,
+              COUNT(DISTINCT external_user_id) as unique_users,
+              COUNT(DISTINCT advertiser) as unique_advertisers,
+              array_agg(DISTINCT advertiser) FILTER (WHERE advertiser IS NOT NULL) as advertisers
+            FROM public.user_events ue
+            WHERE ue.external_user_id IS NOT NULL
+              AND ue.event_date >= $1::date
+              AND ue.event_date < ($2::date + INTERVAL '1 day')
+              AND ue.event_type = $3
+          `;
+          const diagnosticParams = [params.startDate, params.endDate, params.eventTypes[0]];
+          const diagResult = await client.query(diagnosticQuery, diagnosticParams);
+          console.log(`[${requestId}] Diagnostic result (all advertisers):`, diagResult.rows[0]);
+          
+          // If advertiser filter is applied, check data for that advertiser
+          if (params.categories && params.categories.length > 0) {
+            const mappedCategories = params.categories.map(cat => {
+              if (cat === '1') return '4rabet';
+              if (cat === '2') return 'Crorebet';
+              return cat;
+            });
+            const advertiserDiagQuery = `
+              SELECT 
+                COUNT(*) as total_events,
+                COUNT(DISTINCT external_user_id) as unique_users,
+                advertiser
+              FROM public.user_events ue
+              WHERE ue.external_user_id IS NOT NULL
+                AND ue.event_date >= $1::date
+                AND ue.event_date < ($2::date + INTERVAL '1 day')
+                AND ue.event_type = $3
+                AND ue.advertiser IN (${mappedCategories.map((_, i) => `$${4 + i}`).join(', ')})
+              GROUP BY advertiser
+            `;
+            const advertiserDiagParams = [params.startDate, params.endDate, params.eventTypes[0], ...mappedCategories];
+            const advertiserDiagResult = await client.query(advertiserDiagQuery, advertiserDiagParams);
+            console.log(`[${requestId}] Advertiser diagnostic result:`, advertiserDiagResult.rows);
+          }
+        } catch (diagError) {
+          console.error(`[${requestId}] Diagnostic query failed:`, diagError);
+        }
+      }
+      
       userIds = userResult.rows.map(row => row.external_user_id);
       console.log(`[${requestId}] Extracted ${userIds.length} unique user IDs`);
       console.log(`[${requestId}] Sample user IDs:`, userIds.slice(0, 5));
