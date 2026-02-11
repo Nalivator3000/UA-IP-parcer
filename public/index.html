@@ -485,6 +485,24 @@
     </div>
     
     <script>
+        // Load version on page load
+        async function loadVersion() {
+            try {
+                const response = await fetch('/api/version');
+                const data = await response.json();
+                const versionEl = document.getElementById('version');
+                if (versionEl && data.version) {
+                    versionEl.textContent = `v${data.version}`;
+                    console.log(`[App] Version: ${data.version}`);
+                }
+            } catch (error) {
+                console.error('Error loading version:', error);
+            }
+        }
+        
+        // Load version immediately
+        loadVersion();
+        
         // Load event types and categories on page load
         async function loadEventTypes() {
             const container = document.getElementById('eventTypesContainer');
