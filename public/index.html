@@ -627,7 +627,9 @@
                     return;
                 }
                 
-                // Сохраняем статические чекбоксы (4rabet и Crorebet)
+                console.log('[LoadCategories] API returned data:', data);
+                
+                // Очищаем контейнер, но сохраняем статические чекбоксы как fallback
                 const staticCheckboxes = container.querySelectorAll('input[value="4rabet"], input[value="Crorebet"]');
                 const staticElements = Array.from(staticCheckboxes).map(cb => {
                     const item = cb.closest('.checkbox-item');
@@ -637,26 +639,43 @@
                 // Очищаем контейнер
                 container.innerHTML = '';
                 
-                // Если API вернул данные, используем их
+                // Если API вернул данные, используем их с маппингом
                 if (data && data.length > 0) {
+                    console.log('[LoadCategories] Processing', data.length, 'categories from API');
                     data.forEach(item => {
                         // Map advertiser values to display names
                         let displayName = item.advertiser;
-                        if (item.advertiser === '4rabet') {
+                        if (item.advertiser === '4rabet' || item.advertiser === '1') {
                             displayName = '4ra';
-                        } else if (item.advertiser === 'Crorebet') {
+                        } else if (item.advertiser === 'Crorebet' || item.advertiser === '2') {
                             displayName = 'Crore';
                         }
+                        console.log('[LoadCategories] Creating checkbox:', item.advertiser, '->', displayName);
                         const checkbox = createCheckbox('categories', item.advertiser, displayName);
                         container.appendChild(checkbox);
                     });
                 } else {
                     // Если API не вернул данные, используем статические варианты
+                    console.log('[LoadCategories] No API data, using static checkboxes');
                     staticElements.forEach(el => container.appendChild(el));
                 }
             } catch (error) {
                 console.error('Error loading categories:', error);
                 // При ошибке оставляем статические чекбоксы (они уже есть в HTML)
+                // Но нужно их восстановить, так как контейнер мог быть очищен
+                const container = document.getElementById('categoriesContainer');
+                if (container && container.children.length === 0) {
+                    container.innerHTML = `
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="categories" value="4rabet" id="advertiser_4ra">
+                            <label for="advertiser_4ra">4ra</label>
+                        </div>
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="categories" value="Crorebet" id="advertiser_crore">
+                            <label for="advertiser_crore">Crore</label>
+                        </div>
+                    `;
+                }
             }
         }
         
