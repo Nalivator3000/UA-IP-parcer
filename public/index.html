@@ -623,7 +623,8 @@
                 minDeposit: formData.get('minDeposit'),
                 maxDeposit: formData.get('maxDeposit'),
                 eventTypes: Array.from(document.querySelectorAll('input[name="eventTypes"]:checked')).map(cb => cb.value),
-                withoutEvents: Array.from(document.querySelectorAll('input[name="withoutEvents"]:checked')).map(cb => cb.value)
+                withoutEvents: Array.from(document.querySelectorAll('input[name="withoutEvents"]:checked')).map(cb => cb.value),
+                categories: Array.from(document.querySelectorAll('input[name="categories"]:checked')).map(cb => cb.value)
             };
             
             // Validation

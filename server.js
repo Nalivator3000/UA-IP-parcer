@@ -202,10 +202,10 @@ app.post('/api/export', async (req, res) => {
     console.log(`[${requestId}] Executing user query...`);
     const queryStartTime = Date.now();
     
-    // Add query timeout wrapper
+    // Add query timeout wrapper (increased to 10 minutes)
     const userQueryPromise = pool.query(userQuery, whereData.values);
     const userQueryTimeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(`User query timeout after 60 seconds`)), 60000);
+      setTimeout(() => reject(new Error(`User query timeout after 600 seconds`)), 600000);
     });
     
     const userResult = await Promise.race([userQueryPromise, userQueryTimeoutPromise]);
@@ -299,7 +299,7 @@ app.post('/api/export', async (req, res) => {
           // Add query timeout wrapper
           const queryPromise = pool.query(batchQuery, batch);
           const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error(`Query timeout after 60 seconds`)), 60000);
+            setTimeout(() => reject(new Error(`Query timeout after 600 seconds`)), 600000);
           });
           
           const batchResult = await Promise.race([queryPromise, timeoutPromise]);
