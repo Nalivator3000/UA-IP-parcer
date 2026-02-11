@@ -253,7 +253,7 @@ app.post('/api/export', async (req, res) => {
       return res.end();
     }
 
-    console.log(`[Server] Found ${userIds.length} users, starting batch processing...`);
+    console.log(`[${requestId}] Found ${userIds.length} users, starting batch processing...`);
     res.write(JSON.stringify({ progress: 20, message: `Найдено ${userIds.length} пользователей. Получение UA/IP...` }) + '\n');
 
     // Step 2: Get all User Agent and IP pairs for these users (80% progress)
@@ -266,7 +266,7 @@ app.post('/api/export', async (req, res) => {
         AND column_name IN ('user_agent', 'ip_address')
     `;
     
-    console.log(`[Server] Checking if columns exist...`);
+    console.log(`[${requestId}] Checking if columns exist...`);
     
     // Add query timeout wrapper
     const columnsQueryPromise = pool.query(checkColumnsQuery);
@@ -279,11 +279,11 @@ app.post('/api/export', async (req, res) => {
     const hasUserAgent = existingColumns.includes('user_agent');
     const hasIpAddress = existingColumns.includes('ip_address');
     
-    console.log(`[Server] Columns check: hasUserAgent=${hasUserAgent}, hasIpAddress=${hasIpAddress}`);
-    console.log(`[Server] Existing columns:`, existingColumns);
+    console.log(`[${requestId}] Columns check: hasUserAgent=${hasUserAgent}, hasIpAddress=${hasIpAddress}`);
+    console.log(`[${requestId}] Existing columns:`, existingColumns);
     
     if (!hasUserAgent || !hasIpAddress) {
-      console.error(`[Server] ERROR: Columns missing! hasUserAgent=${hasUserAgent}, hasIpAddress=${hasIpAddress}`);
+      console.error(`[${requestId}] ERROR: Columns missing! hasUserAgent=${hasUserAgent}, hasIpAddress=${hasIpAddress}`);
       res.write(JSON.stringify({ progress: 0, error: `Колонки не найдены: user_agent=${hasUserAgent}, ip_address=${hasIpAddress}` }) + '\n');
       return res.end();
     }
@@ -294,19 +294,19 @@ app.post('/api/export', async (req, res) => {
     const allRows = [];
     const totalBatches = Math.ceil(userIds.length / BATCH_SIZE);
     
-    console.log(`[Server] Processing ${userIds.length} users in ${totalBatches} batches of ${BATCH_SIZE}`);
+    console.log(`[${requestId}] Processing ${userIds.length} users in ${totalBatches} batches of ${BATCH_SIZE}`);
     
     if (hasUserAgent && hasIpAddress) {
-      console.log(`[Server] Both columns exist, starting batch processing...`);
+      console.log(`[${requestId}] Both columns exist, starting batch processing...`);
       // Process users in batches
       for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
         const batch = userIds.slice(i, i + BATCH_SIZE);
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-        console.log(`[Server] Processing batch ${batchNum}/${totalBatches} (${batch.length} users)`);
+        console.log(`[${requestId}] Processing batch ${batchNum}/${totalBatches} (${batch.length} users)`);
         
         try {
           const placeholders = batch.map((_, idx) => `$${idx + 1}`).join(', ');
-          console.log(`[Server] Batch ${batchNum}: Created ${batch.length} placeholders`);
+          console.log(`[${requestId}] Batch ${batchNum}: Created ${batch.length} placeholders`);
           
           const batchQuery = `
             SELECT 
@@ -321,8 +321,8 @@ app.post('/api/export', async (req, res) => {
             GROUP BY ue.user_agent, ue.ip_address
           `;
           
-          console.log(`[Server] Batch ${batchNum}: Executing query with ${batch.length} parameters`);
-          console.log(`[Server] Batch ${batchNum}: Sample user IDs:`, batch.slice(0, 3));
+          console.log(`[${requestId}] Batch ${batchNum}: Executing query with ${batch.length} parameters`);
+          console.log(`[${requestId}] Batch ${batchNum}: Sample user IDs:`, batch.slice(0, 3));
           
           const batchQueryStartTime = Date.now();
           
@@ -391,11 +391,12 @@ app.post('/api/export', async (req, res) => {
       
       var exportResult = { rows: uniqueRows };
     } else {
-      console.log(`[Server] Columns missing: hasUserAgent=${hasUserAgent}, hasIpAddress=${hasIpAddress}`);
+      console.log(`[${requestId}] Columns missing: hasUserAgent=${hasUserAgent}, hasIpAddress=${hasIpAddress}`);
       // If columns don't exist, return empty result
       var exportResult = { rows: [] };
     }
 
+    console.log(`[${requestId}] Preparing CSV export with ${exportResult.rows.length} rows`);
     res.write(JSON.stringify({ progress: 80, message: `Получено ${exportResult.rows.length} записей. Генерация CSV...` }) + '\n');
 
     // Generate CSV (100% progress)
