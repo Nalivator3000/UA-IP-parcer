@@ -445,12 +445,12 @@
                         <!-- Advertiser загружаются динамически -->
                         <!-- Статические варианты на случай, если API не работает -->
                         <div class="checkbox-item">
-                            <input type="checkbox" name="categories" value="1" id="advertiser_4ra">
-                            <label for="advertiser_4ra">4ra (ID: 1)</label>
+                            <input type="checkbox" name="categories" value="4rabet" id="advertiser_4ra">
+                            <label for="advertiser_4ra">4ra (4rabet)</label>
                         </div>
                         <div class="checkbox-item">
-                            <input type="checkbox" name="categories" value="2" id="advertiser_crore">
-                            <label for="advertiser_crore">Crore (ID: 2)</label>
+                            <input type="checkbox" name="categories" value="Crorebet" id="advertiser_crore">
+                            <label for="advertiser_crore">Crore (Crorebet)</label>
                         </div>
                     </div>
                     <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 8px;">
@@ -936,7 +936,7 @@
             // Also retry categories if needed
             const categoriesContainer = document.getElementById('categoriesContainer');
             if (categoriesContainer && categoriesContainer.children.length <= 2) {
-                // Only static checkboxes (4ra and Crore), try to load dynamic ones
+                // Only static checkboxes (4rabet and Crorebet), try to load dynamic ones
                 console.log('[Init] Retrying loadCategories...');
                 loadCategories();
             }
