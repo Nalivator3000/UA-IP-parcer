@@ -823,53 +823,76 @@
                 let progressReceived = false;
                 let csvStarted = false;
                 let chunkCount = 0;
+                let exportError = null;
                 
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) {
-                        console.log('[Export] Stream finished. Chunks:', chunkCount);
-                        break;
-                    }
-                    
-                    chunkCount++;
-                    buffer += decoder.decode(value, { stream: true });
-                    console.log(`[Export] Chunk ${chunkCount} received, buffer length:`, buffer.length);
-                    
-                    // Try to parse JSON progress updates (they come first, separated by \n)
-                    let newlineIndex;
-                    while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-                        const line = buffer.substring(0, newlineIndex).trim();
-                        buffer = buffer.substring(newlineIndex + 1);
+                try {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) {
+                            console.log('[Export] Stream finished. Chunks:', chunkCount);
+                            break;
+                        }
                         
-                        if (line) {
-                            // Check if it's JSON (progress update)
-                            if (line.startsWith('{') && line.endsWith('}')) {
-                                try {
-                                    const update = JSON.parse(line);
-                                    console.log('[Export] Progress update:', update);
-                                    if (update.error) {
-                                        console.error('[Export] Error in progress update:', update.error);
-                                        // Stop processing immediately on error
-                                        throw new Error(update.error);
+                        chunkCount++;
+                        buffer += decoder.decode(value, { stream: true });
+                        console.log(`[Export] Chunk ${chunkCount} received, buffer length:`, buffer.length);
+                        
+                        // Try to parse JSON progress updates (they come first, separated by \n)
+                        let newlineIndex;
+                        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+                            const line = buffer.substring(0, newlineIndex).trim();
+                            buffer = buffer.substring(newlineIndex + 1);
+                            
+                            if (line) {
+                                // Check if it's JSON (progress update)
+                                if (line.startsWith('{') && line.endsWith('}')) {
+                                    try {
+                                        const update = JSON.parse(line);
+                                        console.log('[Export] Progress update:', update);
+                                        
+                                        // Check for error first
+                                        if (update.error) {
+                                            console.error('[Export] Error in progress update:', update.error);
+                                            exportError = new Error(update.error);
+                                            break; // Exit inner loop
+                                        }
+                                        
+                                        if (update.progress !== undefined) {
+                                            updateProgress(update.progress, update.message || 'Обработка...');
+                                            progressReceived = true;
+                                            continue;
+                                        }
+                                    } catch (e) {
+                                        // If it's not a parse error but an actual error, re-throw
+                                        if (e.message && !e.message.includes('JSON') && !e.message.includes('Unexpected')) {
+                                            throw e;
+                                        }
+                                        console.warn('[Export] Failed to parse JSON, treating as CSV:', e.message);
+                                        // Not valid JSON, might be CSV
+                                        csvData += line + '\n';
+                                        csvStarted = true;
                                     }
-                                    if (update.progress !== undefined) {
-                                        updateProgress(update.progress, update.message || 'Обработка...');
-                                        progressReceived = true;
-                                        continue;
-                                    }
-                                } catch (e) {
-                                    console.warn('[Export] Failed to parse JSON, treating as CSV:', e.message);
-                                    // Not valid JSON, might be CSV
+                                } else {
+                                    // CSV data
                                     csvData += line + '\n';
                                     csvStarted = true;
                                 }
-                            } else {
-                                // CSV data
-                                csvData += line + '\n';
-                                csvStarted = true;
                             }
                         }
+                        
+                        // If we got an error, break out of the main loop
+                        if (exportError) {
+                            break;
+                        }
                     }
+                } catch (streamError) {
+                    console.error('[Export] Error while reading stream:', streamError);
+                    exportError = streamError;
+                }
+                
+                // If we got an error, throw it now
+                if (exportError) {
+                    throw exportError;
                 }
                 
                 // Add remaining buffer to CSV (if CSV has started or no progress was received)
