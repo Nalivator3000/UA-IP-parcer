@@ -259,7 +259,9 @@ app.post('/api/export', async (req, res) => {
 
     if (userIds.length === 0) {
       console.log(`[${requestId}] ERROR: No users found matching criteria`);
-      res.write(JSON.stringify({ progress: 0, error: 'No users found matching the criteria' }) + '\n');
+      console.log(`[${requestId}] Query was:`, userQuery);
+      console.log(`[${requestId}] Query values were:`, whereData.values);
+      res.write(JSON.stringify({ progress: 0, error: 'No users found matching the criteria. Try adjusting filters (dates, event types, advertiser).' }) + '\n');
       return res.end();
     }
 
