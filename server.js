@@ -400,22 +400,37 @@ app.post('/api/export', async (req, res) => {
     }
 
     console.log(`[${requestId}] Preparing CSV export with ${exportResult.rows.length} rows`);
+    
+    if (exportResult.rows.length === 0) {
+      console.error(`[${requestId}] ERROR: No rows to export!`);
+      res.write(JSON.stringify({ progress: 0, error: 'No data found matching the criteria. No user_agent/ip_address pairs found for selected users.' }) + '\n');
+      return res.end();
+    }
+    
     res.write(JSON.stringify({ progress: 80, message: `Получено ${exportResult.rows.length} записей. Генерация CSV...` }) + '\n');
 
     // Generate CSV (100% progress)
     // Only export UA+IP pairs
     const columns = ['user_agent', 'ip_address'];
     
+    console.log(`[${requestId}] Generating CSV with ${exportResult.rows.length} rows, columns:`, columns);
+    console.log(`[${requestId}] Sample row:`, exportResult.rows[0]);
+    
     const csvData = stringify(exportResult.rows, {
       header: true,
       columns: columns
     });
 
+    console.log(`[${requestId}] CSV generated, length: ${csvData.length} characters`);
+    console.log(`[${requestId}] CSV preview (first 200 chars):`, csvData.substring(0, 200));
+
     res.write(JSON.stringify({ progress: 100, message: 'CSV файл успешно сгенерирован!' }) + '\n');
 
     // Send CSV data
+    console.log(`[${requestId}] Sending CSV data to client...`);
     res.write(csvData);
     res.end();
+    console.log(`[${requestId}] CSV export completed successfully`);
     
     // Clear timeout on successful completion
     clearTimeout(timeoutId);

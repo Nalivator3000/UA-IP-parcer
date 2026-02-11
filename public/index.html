@@ -916,7 +916,10 @@
                     console.log('[Export] CSV download completed');
                 } else {
                     console.error('[Export] ERROR: CSV data is empty!');
-                    throw new Error('CSV данные пусты. Проверьте логи сервера в Railway Dashboard.');
+                    console.error('[Export] Original CSV length:', csvData.length);
+                    console.error('[Export] Trimmed CSV length:', trimmedCsv.length);
+                    console.error('[Export] Buffer at end:', buffer);
+                    throw new Error('CSV данные пусты. Проверьте логи сервера в Railway Dashboard. Возможно, для выбранных пользователей нет данных user_agent/ip_address.');
                 }
                 
                 setTimeout(() => {
