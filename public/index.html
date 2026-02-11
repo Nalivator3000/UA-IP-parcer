@@ -881,10 +881,18 @@
                         try {
                             const update = JSON.parse(trimmedBuffer);
                             console.log('[Export] Parsed final progress update:', update);
+                            if (update.error) {
+                                console.error('[Export] Error in final progress update:', update.error);
+                                throw new Error(update.error);
+                            }
                             if (update.progress !== undefined) {
                                 updateProgress(update.progress, update.message || 'Обработка...');
                             }
                         } catch (e) {
+                            if (e.message && !e.message.includes('JSON') && !e.message.includes('Unexpected')) {
+                                // Re-throw if it's an error message, not a JSON parse error
+                                throw e;
+                            }
                             console.log('[Export] Final buffer is not JSON, adding to CSV');
                             csvData += buffer;
                         }
