@@ -642,18 +642,35 @@
                 // Если API вернул данные, используем их с маппингом
                 if (data && data.length > 0) {
                     console.log('[LoadCategories] Processing', data.length, 'categories from API');
-                    data.forEach(item => {
-                        // Map advertiser values to display names
-                        let displayName = item.advertiser;
-                        if (item.advertiser === '4rabet' || item.advertiser === '1') {
-                            displayName = '4ra';
-                        } else if (item.advertiser === 'Crorebet' || item.advertiser === '2') {
-                            displayName = 'Crore';
-                        }
-                        console.log('[LoadCategories] Creating checkbox:', item.advertiser, '->', displayName);
-                        const checkbox = createCheckbox('categories', item.advertiser, displayName);
-                        container.appendChild(checkbox);
+                    // Filter and map only 4rabet and Crorebet
+                    const validAdvertisers = data.filter(item => {
+                        const adv = item.advertiser;
+                        return adv === '4rabet' || adv === 'Crorebet' || adv === '1' || adv === '2';
                     });
+                    
+                    if (validAdvertisers.length > 0) {
+                        validAdvertisers.forEach(item => {
+                            // Map advertiser values to display names and correct values
+                            let displayName = item.advertiser;
+                            let value = item.advertiser;
+                            
+                            if (item.advertiser === '4rabet' || item.advertiser === '1') {
+                                displayName = '4ra';
+                                value = '4rabet'; // Always use correct value
+                            } else if (item.advertiser === 'Crorebet' || item.advertiser === '2') {
+                                displayName = 'Crore';
+                                value = 'Crorebet'; // Always use correct value
+                            }
+                            
+                            console.log('[LoadCategories] Creating checkbox:', item.advertiser, '->', displayName, '(value:', value + ')');
+                            const checkbox = createCheckbox('categories', value, displayName);
+                            container.appendChild(checkbox);
+                        });
+                    } else {
+                        // Если API вернул данные, но нет нужных advertiser, используем статические
+                        console.log('[LoadCategories] No valid advertisers in API response, using static checkboxes');
+                        staticElements.forEach(el => container.appendChild(el));
+                    }
                 } else {
                     // Если API не вернул данные, используем статические варианты
                     console.log('[LoadCategories] No API data, using static checkboxes');
