@@ -18,11 +18,11 @@ const EVENT_TYPES_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://postgres:SriKJuzBhROvpXTloDLNQieJgAedbaAq@yamabiko.proxy.rlwy.net:47136/railway',
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
-  // Timeout settings
-  connectionTimeoutMillis: 10000, // 10 seconds to connect
-  query_timeout: 300000, // 5 minutes for queries (300 seconds)
-  statement_timeout: 300000, // 5 minutes for statements
-  idle_in_transaction_session_timeout: 300000, // 5 minutes
+  // Timeout settings (increased to 10 minutes)
+  connectionTimeoutMillis: 30000, // 30 seconds to connect
+  query_timeout: 600000, // 10 minutes for queries (600 seconds)
+  statement_timeout: 600000, // 10 minutes for statements
+  idle_in_transaction_session_timeout: 600000, // 10 minutes
   // Pool settings
   max: 10, // Maximum number of clients in the pool
   min: 2, // Minimum number of clients in the pool
@@ -204,20 +204,34 @@ app.post('/api/export', async (req, res) => {
     console.log(`[${requestId}] Executing user query...`);
     const queryStartTime = Date.now();
     
-    // Add query timeout wrapper (increased to 10 minutes)
-    const userQueryPromise = pool.query(userQuery, whereData.values);
-    const userQueryTimeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(`User query timeout after 600 seconds`)), 600000);
-    });
-    
-    const userResult = await Promise.race([userQueryPromise, userQueryTimeoutPromise]);
-    const queryTime = Date.now() - queryStartTime;
-    console.log(`[${requestId}] User query executed in ${queryTime}ms`);
-    console.log(`[${requestId}] User query returned ${userResult.rows.length} rows`);
-    
-    const userIds = userResult.rows.map(row => row.external_user_id);
-    console.log(`[${requestId}] Extracted ${userIds.length} unique user IDs`);
-    console.log(`[${requestId}] Sample user IDs:`, userIds.slice(0, 5));
+    // Use a client with increased timeout settings
+    const client = await pool.connect();
+    try {
+      // Set timeout for this specific connection
+      await client.query('SET statement_timeout = 600000'); // 10 minutes
+      await client.query('SET query_timeout = 600000'); // 10 minutes
+      await client.query('SET idle_in_transaction_session_timeout = 600000'); // 10 minutes
+      
+      console.log(`[${requestId}] Timeout settings applied: 10 minutes (600 seconds)`);
+      
+      // Execute query with timeout wrapper
+      const userQueryPromise = client.query(userQuery, whereData.values);
+      const userQueryTimeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`User query timeout after 600 seconds`)), 600000);
+      });
+      
+      const userResult = await Promise.race([userQueryPromise, userQueryTimeoutPromise]);
+      const queryTime = Date.now() - queryStartTime;
+      console.log(`[${requestId}] User query executed in ${queryTime}ms`);
+      console.log(`[${requestId}] User query returned ${userResult.rows.length} rows`);
+      
+      const userIds = userResult.rows.map(row => row.external_user_id);
+      console.log(`[${requestId}] Extracted ${userIds.length} unique user IDs`);
+      console.log(`[${requestId}] Sample user IDs:`, userIds.slice(0, 5));
+    } finally {
+      // Release the client back to the pool
+      client.release();
+    }
 
     if (userIds.length === 0) {
       console.log(`[${requestId}] ERROR: No users found matching criteria`);
