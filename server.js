@@ -218,6 +218,9 @@ app.post('/api/export', async (req, res) => {
     console.log(`[${requestId}] Executing user query...`);
     const queryStartTime = Date.now();
     
+    // Declare userIds outside try block so it's accessible after
+    let userIds = [];
+    
     // Use a client with increased timeout settings
     const client = await pool.connect();
     try {
@@ -239,7 +242,7 @@ app.post('/api/export', async (req, res) => {
       console.log(`[${requestId}] User query executed in ${queryTime}ms`);
       console.log(`[${requestId}] User query returned ${userResult.rows.length} rows`);
       
-      const userIds = userResult.rows.map(row => row.external_user_id);
+      userIds = userResult.rows.map(row => row.external_user_id);
       console.log(`[${requestId}] Extracted ${userIds.length} unique user IDs`);
       console.log(`[${requestId}] Sample user IDs:`, userIds.slice(0, 5));
     } finally {
