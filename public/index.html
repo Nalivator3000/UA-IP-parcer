@@ -909,7 +909,7 @@
                 
                 if (trimmedCsv && trimmedCsv.length > 0) {
                     console.log('[Export] Creating blob and downloading CSV...');
-                    const blob = new Blob([csvData], { type: 'text/csv' });
+                    const blob = new Blob([trimmedCsv], { type: 'text/csv' });
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
