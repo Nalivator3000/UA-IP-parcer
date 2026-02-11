@@ -143,6 +143,8 @@ app.post('/api/export', async (req, res) => {
     }
     
     console.log(`[${requestId}] User query (first 500 chars):`, userQuery.substring(0, 500));
+    console.log(`[${requestId}] Full user query:`, userQuery);
+    console.log(`[${requestId}] Query parameters:`, whereData.values);
 
     // Handle "without events" condition with funnel logic (reg->ftd->dep)
     if (params.withoutEvents && params.withoutEvents.length > 0) {
