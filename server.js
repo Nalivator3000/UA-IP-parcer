@@ -145,6 +145,8 @@ app.post('/api/export', async (req, res) => {
     console.log(`[${requestId}] User query (first 500 chars):`, userQuery.substring(0, 500));
     console.log(`[${requestId}] Full user query:`, userQuery);
     console.log(`[${requestId}] Query parameters:`, whereData.values);
+    console.log(`[${requestId}] Full user query:`, userQuery);
+    console.log(`[${requestId}] Query parameters:`, whereData.values);
 
     // Handle "without events" condition with funnel logic (reg->ftd->dep)
     if (params.withoutEvents && params.withoutEvents.length > 0) {
@@ -298,12 +300,16 @@ app.post('/api/export', async (req, res) => {
               AND ue.event_date < ($2::date + INTERVAL '1 day')
               AND ue.event_type = $3
           `;
-          const diagnosticParams = [params.startDate, params.endDate, params.eventTypes[0]];
-          const diagResult = await client.query(diagnosticQuery, diagnosticParams);
-          console.log(`[${requestId}] Diagnostic result (all advertisers):`, diagResult.rows[0]);
+          if (params.eventTypes && params.eventTypes.length > 0) {
+            const diagnosticParams = [params.startDate, params.endDate, params.eventTypes[0]];
+            const diagResult = await client.query(diagnosticQuery, diagnosticParams);
+            console.log(`[${requestId}] Diagnostic result (all advertisers):`, diagResult.rows[0]);
+          } else {
+            console.log(`[${requestId}] No eventTypes specified, skipping diagnostic query`);
+          }
           
           // If advertiser filter is applied, check data for that advertiser
-          if (params.categories && params.categories.length > 0) {
+          if (params.categories && params.categories.length > 0 && params.eventTypes && params.eventTypes.length > 0) {
             const mappedCategories = params.categories.map(cat => {
               if (cat === '1') return '4rabet';
               if (cat === '2') return 'Crorebet';
@@ -325,6 +331,25 @@ app.post('/api/export', async (req, res) => {
             const advertiserDiagParams = [params.startDate, params.endDate, params.eventTypes[0], ...mappedCategories];
             const advertiserDiagResult = await client.query(advertiserDiagQuery, advertiserDiagParams);
             console.log(`[${requestId}] Advertiser diagnostic result:`, advertiserDiagResult.rows);
+            
+            // Also check what advertisers actually exist in the data
+            const allAdvertisersQuery = `
+              SELECT 
+                advertiser,
+                COUNT(*) as total_events,
+                COUNT(DISTINCT external_user_id) as unique_users
+              FROM public.user_events ue
+              WHERE ue.external_user_id IS NOT NULL
+                AND ue.event_date >= $1::date
+                AND ue.event_date < ($2::date + INTERVAL '1 day')
+                AND ue.event_type = $3
+                AND ue.advertiser IS NOT NULL
+              GROUP BY advertiser
+              ORDER BY total_events DESC
+            `;
+            const allAdvertisersParams = [params.startDate, params.endDate, params.eventTypes[0]];
+            const allAdvertisersResult = await client.query(allAdvertisersQuery, allAdvertisersParams);
+            console.log(`[${requestId}] All advertisers in data:`, allAdvertisersResult.rows);
           }
         } catch (diagError) {
           console.error(`[${requestId}] Diagnostic query failed:`, diagError);
