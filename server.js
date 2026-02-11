@@ -2,10 +2,12 @@ const express = require('express');
 const { Pool } = require('pg');
 const { stringify } = require('csv-stringify/sync');
 const path = require('path');
+const packageJson = require('./package.json');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const APP_VERSION = packageJson.version;
 
 // Cache for event types (initialize with default values) - MUST be declared before routes
 let eventTypesCache = null;
@@ -589,9 +591,19 @@ app.get('/api/categories', async (req, res) => {
 // Health check - must work even if DB is down (for Railway health checks)
 app.get('/api/health', async (req, res) => {
   res.status(200).json({ 
-    status: 'ok', 
+    status: 'ok',
+    version: APP_VERSION,
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
+  });
+});
+
+// Version endpoint
+app.get('/api/version', (req, res) => {
+  res.json({ 
+    version: APP_VERSION,
+    name: packageJson.name,
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -655,8 +667,13 @@ process.on('unhandledRejection', (reason, promise) => {
 // Start server with error handling
 try {
   app.listen(PORT, () => {
-    console.log(`\n🚀 Server running on port ${PORT}`);
-    console.log(`📱 Open http://localhost:${PORT} in your browser\n`);
+    console.log('\n' + '='.repeat(60));
+    console.log(`🚀 UA-IP-parcer Server`);
+    console.log(`📦 Version: ${APP_VERSION}`);
+    console.log(`🌐 Port: ${PORT}`);
+    console.log(`🔗 URL: http://localhost:${PORT}`);
+    console.log(`📅 Started: ${new Date().toISOString()}`);
+    console.log('='.repeat(60) + '\n');
     
     // Start preloading event types after server starts
     setTimeout(() => {

@@ -1,6 +1,6 @@
 {
   "name": "ubidex-csv-export",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Web application for exporting User Agent and IP pairs from Ubidex database",
   "main": "server.js",
   "scripts": {
