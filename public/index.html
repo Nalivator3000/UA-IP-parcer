@@ -899,8 +899,15 @@
                 
                 // Download CSV
                 console.log('[Export] CSV data length:', csvData.length);
-                console.log('[Export] CSV data preview (first 200 chars):', csvData.substring(0, 200));
-                if (csvData && csvData.trim().length > 0) {
+                console.log('[Export] CSV data preview (first 500 chars):', csvData.substring(0, 500));
+                console.log('[Export] CSV data ends with:', csvData.substring(Math.max(0, csvData.length - 100)));
+                console.log('[Export] Progress received:', progressReceived, 'CSV started:', csvStarted);
+                
+                // Trim CSV data to remove any trailing newlines or whitespace issues
+                const trimmedCsv = csvData.trim();
+                console.log('[Export] Trimmed CSV length:', trimmedCsv.length);
+                
+                if (trimmedCsv && trimmedCsv.length > 0) {
                     console.log('[Export] Creating blob and downloading CSV...');
                     const blob = new Blob([csvData], { type: 'text/csv' });
                     const url = window.URL.createObjectURL(blob);
