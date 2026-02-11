@@ -731,6 +731,8 @@
                 categories: Array.from(document.querySelectorAll('input[name="categories"]:checked')).map(cb => cb.value)
             };
             
+            console.log('[Export] Request data:', JSON.stringify(data, null, 2));
+            
             // Validation
             if (!data.startDate || !data.endDate) {
                 showError('Пожалуйста, выберите период');

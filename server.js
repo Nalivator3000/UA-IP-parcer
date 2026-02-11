@@ -146,6 +146,21 @@ app.post('/api/export', async (req, res) => {
 
     // Handle "without events" condition with funnel logic (reg->ftd->dep)
     if (params.withoutEvents && params.withoutEvents.length > 0) {
+      // Check if any withoutEvents overlap with eventTypes - if so, filter them out
+      const eventTypesSet = new Set(params.eventTypes || []);
+      const filteredWithoutEvents = params.withoutEvents.filter(event => !eventTypesSet.has(event));
+      
+      if (filteredWithoutEvents.length === 0) {
+        console.log(`[${requestId}] WARNING: All withoutEvents overlap with eventTypes, ignoring withoutEvents filter`);
+        // Don't apply withoutEvents logic if all excluded events are also in eventTypes
+      } else if (filteredWithoutEvents.length < params.withoutEvents.length) {
+        console.log(`[${requestId}] INFO: Filtered out ${params.withoutEvents.length - filteredWithoutEvents.length} withoutEvents that overlap with eventTypes`);
+        console.log(`[${requestId}] Original withoutEvents:`, params.withoutEvents);
+        console.log(`[${requestId}] Filtered withoutEvents:`, filteredWithoutEvents);
+        // Use filtered list
+        params.withoutEvents = filteredWithoutEvents;
+      }
+      
       // Map event types to funnel order
       const funnelOrder = { 'regfinished': 1, 'ftd': 2, 'deposit': 3 };
       
@@ -185,10 +200,12 @@ app.post('/api/export', async (req, res) => {
         periodIndex += mappedCategories.length;
       }
       
-      // Build query: users with events in period, but WITHOUT excluded events EVER (considering funnel)
-      const withoutPlaceholders = params.withoutEvents.map((_, i) => `$${periodIndex + i}`).join(', ');
-      
-      userQuery = `
+      // Only apply withoutEvents logic if we have events to exclude
+      if (params.withoutEvents.length > 0) {
+        // Build query: users with events in period, but WITHOUT excluded events EVER (considering funnel)
+        const withoutPlaceholders = params.withoutEvents.map((_, i) => `$${periodIndex + i}`).join(', ');
+        
+        userQuery = `
         WITH users_in_period AS (
           SELECT DISTINCT ue.external_user_id, MIN(ue.event_date) as first_event_date
           FROM public.user_events ue
