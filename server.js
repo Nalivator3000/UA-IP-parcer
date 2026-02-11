@@ -69,10 +69,13 @@ function buildWhereConditions(params) {
 
   // Categories (advertiser)
   if (params.categories && params.categories.length > 0) {
+    console.log(`[buildWhereConditions] Filtering by advertiser:`, params.categories);
     const placeholders = params.categories.map((_, i) => `$${paramIndex + i}`).join(', ');
     conditions.push(`ue.advertiser IN (${placeholders})`);
     values.push(...params.categories);
     paramIndex += params.categories.length;
+  } else {
+    console.log(`[buildWhereConditions] No advertiser filter applied`);
   }
 
   // Deposit amount range
