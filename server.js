@@ -366,8 +366,8 @@ app.post('/api/export', async (req, res) => {
             message: `Обработка батча ${batchNum}/${totalBatches} (${allRows.length} записей получено)...` 
           }) + '\n');
         } catch (batchError) {
-          console.error(`[Server] Error in batch ${batchNum}:`, batchError);
-          console.error(`[Server] Error stack:`, batchError.stack);
+          console.error(`[${requestId}] Error in batch ${batchNum}:`, batchError);
+          console.error(`[${requestId}] Error stack:`, batchError.stack);
           throw batchError;
         }
       }
