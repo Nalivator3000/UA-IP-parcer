@@ -436,6 +436,29 @@
                 </div>
             </div>
             
+            <!-- Advertiser -->
+            <div class="form-section">
+                <h2>Advertiser</h2>
+                <div class="form-group">
+                    <label>Выберите advertiser для фильтрации:</label>
+                    <div class="checkbox-group" id="categoriesContainer">
+                        <!-- Advertiser загружаются динамически -->
+                        <!-- Статические варианты на случай, если API не работает -->
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="categories" value="1" id="advertiser_4ra">
+                            <label for="advertiser_4ra">4ra (ID: 1)</label>
+                        </div>
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="categories" value="2" id="advertiser_crore">
+                            <label for="advertiser_crore">Crore (ID: 2)</label>
+                        </div>
+                    </div>
+                    <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 8px;">
+                        Если не выбрано ни одного advertiser, будут включены все advertiser
+                    </p>
+                </div>
+            </div>
+            
             <!-- Deposit Amount Range -->
             <div class="form-section">
                 <h2>Диапазон сумм депозитов</h2>
@@ -599,14 +622,34 @@
                 const data = await response.json();
                 const container = document.getElementById('categoriesContainer');
                 
+                if (!container) {
+                    console.error('categoriesContainer not found');
+                    return;
+                }
+                
+                // Сохраняем статические чекбоксы (4ra и Crore)
+                const staticCheckboxes = container.querySelectorAll('input[value="1"], input[value="2"]');
+                const staticElements = Array.from(staticCheckboxes).map(cb => {
+                    const item = cb.closest('.checkbox-item');
+                    return item ? item.cloneNode(true) : null;
+                }).filter(el => el !== null);
+                
+                // Очищаем контейнер
                 container.innerHTML = '';
                 
-                data.forEach(item => {
-                    const checkbox = createCheckbox('categories', item.advertiser, `${item.advertiser} (${item.count.toLocaleString()})`);
-                    container.appendChild(checkbox);
-                });
+                // Если API вернул данные, используем их
+                if (data && data.length > 0) {
+                    data.forEach(item => {
+                        const checkbox = createCheckbox('categories', item.advertiser, `${item.advertiser} (${item.count.toLocaleString()})`);
+                        container.appendChild(checkbox);
+                    });
+                } else {
+                    // Если API не вернул данные, используем статические варианты
+                    staticElements.forEach(el => container.appendChild(el));
+                }
             } catch (error) {
                 console.error('Error loading categories:', error);
+                // При ошибке оставляем статические чекбоксы (они уже есть в HTML)
             }
         }
         
@@ -873,12 +916,14 @@
         // Wait for DOM to be fully loaded
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
-                console.log('[Init] DOM loaded, starting loadEventTypes...');
+                console.log('[Init] DOM loaded, starting loadEventTypes and loadCategories...');
                 loadEventTypes();
+                loadCategories();
             });
         } else {
-            console.log('[Init] DOM already loaded, starting loadEventTypes...');
+            console.log('[Init] DOM already loaded, starting loadEventTypes and loadCategories...');
             loadEventTypes();
+            loadCategories();
         }
         
         // Also try to load after a short delay (fallback)
@@ -887,6 +932,13 @@
             if (container && (container.children.length === 0 || container.querySelector('.loading'))) {
                 console.log('[Init] Containers still empty or loading, retrying loadEventTypes...');
                 loadEventTypes();
+            }
+            // Also retry categories if needed
+            const categoriesContainer = document.getElementById('categoriesContainer');
+            if (categoriesContainer && categoriesContainer.children.length <= 2) {
+                // Only static checkboxes (4ra and Crore), try to load dynamic ones
+                console.log('[Init] Retrying loadCategories...');
+                loadCategories();
             }
         }, 2000);
     </script>
