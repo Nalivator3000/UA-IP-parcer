@@ -449,19 +449,7 @@ app.post('/api/export', async (req, res) => {
           console.log(`[${requestId}] Batch ${batchNum}: Created ${batch.length} placeholders`);
           
           // Build query with same filters as user selection (event type, advertiser, dates)
-          let batchQuery = `
-            SELECT 
-              ue.user_agent,
-              ue.ip_address
-            FROM public.user_events ue
-            WHERE ue.external_user_id IN (${placeholders})
-              AND ue.user_agent IS NOT NULL
-              AND ue.user_agent != ''
-              AND ue.ip_address IS NOT NULL
-              AND ue.ip_address != ''
-          `;
-          
-          // Apply same filters as user selection
+          // This ensures we only get UA/IP pairs from events matching the selected criteria
           const batchConditions = [];
           const batchValues = [...batch];
           let batchParamIndex = batch.length + 1;
@@ -497,13 +485,21 @@ app.post('/api/export', async (req, res) => {
             batchParamIndex += mappedCategories.length;
           }
           
-          if (batchConditions.length > 0) {
-            batchQuery += ` AND ${batchConditions.join(' AND ')}`;
-          }
+          const batchQuery = `
+            SELECT DISTINCT
+              ue.user_agent,
+              ue.ip_address
+            FROM public.user_events ue
+            WHERE ue.external_user_id IN (${placeholders})
+              AND ue.user_agent IS NOT NULL
+              AND ue.user_agent != ''
+              AND ue.ip_address IS NOT NULL
+              AND ue.ip_address != ''
+              ${batchConditions.length > 0 ? `AND ${batchConditions.join(' AND ')}` : ''}
+          `;
           
-          batchQuery += ` GROUP BY ue.user_agent, ue.ip_address`;
-          
-          console.log(`[${requestId}] Batch ${batchNum}: Query with filters - eventTypes: ${params.eventTypes}, advertiser: ${params.categories}`);
+          console.log(`[${requestId}] Batch ${batchNum}: Query with ${batch.length} user IDs and ${batchConditions.length} additional filters`);
+          console.log(`[${requestId}] Batch ${batchNum}: Filters - eventTypes: ${params.eventTypes}, advertiser: ${params.categories}, dates: ${params.startDate} to ${params.endDate}`);
           
           console.log(`[${requestId}] Batch ${batchNum}: Executing query with ${batch.length} parameters`);
           console.log(`[${requestId}] Batch ${batchNum}: Sample user IDs:`, batch.slice(0, 3));
@@ -511,6 +507,7 @@ app.post('/api/export', async (req, res) => {
           const batchQueryStartTime = Date.now();
           
           // Add query timeout wrapper
+          // Use DISTINCT instead of GROUP BY for better performance
           const queryPromise = pool.query(batchQuery, batchValues);
           const timeoutPromise = new Promise((_, reject) => {
             setTimeout(() => reject(new Error(`Query timeout after 600 seconds`)), 600000);
