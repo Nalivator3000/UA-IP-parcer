@@ -68,13 +68,14 @@ function buildWhereConditions(params) {
   // Categories (advertiser)
   if (params.categories && params.categories.length > 0) {
     console.log(`[buildWhereConditions] Filtering by advertiser:`, params.categories);
-    // Map old values to new values for backward compatibility
+    // Map UI values to database values
+    // In database, advertisers are stored as '1' and '2', not '4rabet' and 'Crorebet'
     const mappedCategories = params.categories.map(cat => {
-      if (cat === '1') return '4rabet';
-      if (cat === '2') return 'Crorebet';
+      if (cat === '1' || cat === '4rabet') return '1';  // Map to database value
+      if (cat === '2' || cat === 'Crorebet') return '2'; // Map to database value
       return cat;
     });
-    console.log(`[buildWhereConditions] Mapped advertiser values:`, mappedCategories);
+    console.log(`[buildWhereConditions] Mapped advertiser values (UI -> DB):`, params.categories, '->', mappedCategories);
     const placeholders = mappedCategories.map((_, i) => `$${paramIndex + i}`).join(', ');
     conditions.push(`ue.advertiser IN (${placeholders})`);
     values.push(...mappedCategories);
