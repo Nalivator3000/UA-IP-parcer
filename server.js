@@ -448,7 +448,8 @@ app.post('/api/export', async (req, res) => {
           const placeholders = batch.map((_, idx) => `$${idx + 1}`).join(', ');
           console.log(`[${requestId}] Batch ${batchNum}: Created ${batch.length} placeholders`);
           
-          const batchQuery = `
+          // Build query with same filters as user selection (event type, advertiser, dates)
+          let batchQuery = `
             SELECT 
               ue.user_agent,
               ue.ip_address
@@ -458,8 +459,51 @@ app.post('/api/export', async (req, res) => {
               AND ue.user_agent != ''
               AND ue.ip_address IS NOT NULL
               AND ue.ip_address != ''
-            GROUP BY ue.user_agent, ue.ip_address
           `;
+          
+          // Apply same filters as user selection
+          const batchConditions = [];
+          const batchValues = [...batch];
+          let batchParamIndex = batch.length + 1;
+          
+          // Date range
+          if (params.startDate && params.endDate) {
+            batchConditions.push(`ue.event_date >= $${batchParamIndex}::date`);
+            batchValues.push(params.startDate);
+            batchParamIndex++;
+            batchConditions.push(`ue.event_date < ($${batchParamIndex}::date + INTERVAL '1 day')`);
+            batchValues.push(params.endDate);
+            batchParamIndex++;
+          }
+          
+          // Event types
+          if (params.eventTypes && params.eventTypes.length > 0) {
+            const eventPlaceholders = params.eventTypes.map((_, i) => `$${batchParamIndex + i}`).join(', ');
+            batchConditions.push(`ue.event_type IN (${eventPlaceholders})`);
+            batchValues.push(...params.eventTypes);
+            batchParamIndex += params.eventTypes.length;
+          }
+          
+          // Advertiser
+          if (params.categories && params.categories.length > 0) {
+            const mappedCategories = params.categories.map(cat => {
+              if (cat === '1' || cat === '4rabet') return '1';
+              if (cat === '2' || cat === 'Crorebet') return '2';
+              return cat;
+            });
+            const advPlaceholders = mappedCategories.map((_, i) => `$${batchParamIndex + i}`).join(', ');
+            batchConditions.push(`ue.advertiser IN (${advPlaceholders})`);
+            batchValues.push(...mappedCategories);
+            batchParamIndex += mappedCategories.length;
+          }
+          
+          if (batchConditions.length > 0) {
+            batchQuery += ` AND ${batchConditions.join(' AND ')}`;
+          }
+          
+          batchQuery += ` GROUP BY ue.user_agent, ue.ip_address`;
+          
+          console.log(`[${requestId}] Batch ${batchNum}: Query with filters - eventTypes: ${params.eventTypes}, advertiser: ${params.categories}`);
           
           console.log(`[${requestId}] Batch ${batchNum}: Executing query with ${batch.length} parameters`);
           console.log(`[${requestId}] Batch ${batchNum}: Sample user IDs:`, batch.slice(0, 3));
@@ -467,7 +511,7 @@ app.post('/api/export', async (req, res) => {
           const batchQueryStartTime = Date.now();
           
           // Add query timeout wrapper
-          const queryPromise = pool.query(batchQuery, batch);
+          const queryPromise = pool.query(batchQuery, batchValues);
           const timeoutPromise = new Promise((_, reject) => {
             setTimeout(() => reject(new Error(`Query timeout after 600 seconds`)), 600000);
           });
