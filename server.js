@@ -448,43 +448,9 @@ app.post('/api/export', async (req, res) => {
           const placeholders = batch.map((_, idx) => `$${idx + 1}`).join(', ');
           console.log(`[${requestId}] Batch ${batchNum}: Created ${batch.length} placeholders`);
           
-          // Build query with same filters as user selection (event type, advertiser, dates)
-          // This ensures we only get UA/IP pairs from events matching the selected criteria
-          const batchConditions = [];
-          const batchValues = [...batch];
-          let batchParamIndex = batch.length + 1;
-          
-          // Date range
-          if (params.startDate && params.endDate) {
-            batchConditions.push(`ue.event_date >= $${batchParamIndex}::date`);
-            batchValues.push(params.startDate);
-            batchParamIndex++;
-            batchConditions.push(`ue.event_date < ($${batchParamIndex}::date + INTERVAL '1 day')`);
-            batchValues.push(params.endDate);
-            batchParamIndex++;
-          }
-          
-          // Event types
-          if (params.eventTypes && params.eventTypes.length > 0) {
-            const eventPlaceholders = params.eventTypes.map((_, i) => `$${batchParamIndex + i}`).join(', ');
-            batchConditions.push(`ue.event_type IN (${eventPlaceholders})`);
-            batchValues.push(...params.eventTypes);
-            batchParamIndex += params.eventTypes.length;
-          }
-          
-          // Advertiser
-          if (params.categories && params.categories.length > 0) {
-            const mappedCategories = params.categories.map(cat => {
-              if (cat === '1' || cat === '4rabet') return '1';
-              if (cat === '2' || cat === 'Crorebet') return '2';
-              return cat;
-            });
-            const advPlaceholders = mappedCategories.map((_, i) => `$${batchParamIndex + i}`).join(', ');
-            batchConditions.push(`ue.advertiser IN (${advPlaceholders})`);
-            batchValues.push(...mappedCategories);
-            batchParamIndex += mappedCategories.length;
-          }
-          
+          // Get ALL UA/IP pairs for these users, regardless of event date
+          // The user selection already filtered by dates/event types/advertiser
+          // We just need to get all valid UA/IP pairs for these users
           const batchQuery = `
             SELECT DISTINCT
               ue.user_agent,
@@ -495,11 +461,11 @@ app.post('/api/export', async (req, res) => {
               AND ue.user_agent != ''
               AND ue.ip_address IS NOT NULL
               AND ue.ip_address != ''
-              ${batchConditions.length > 0 ? `AND ${batchConditions.join(' AND ')}` : ''}
           `;
           
-          console.log(`[${requestId}] Batch ${batchNum}: Query with ${batch.length} user IDs and ${batchConditions.length} additional filters`);
-          console.log(`[${requestId}] Batch ${batchNum}: Filters - eventTypes: ${params.eventTypes}, advertiser: ${params.categories}, dates: ${params.startDate} to ${params.endDate}`);
+          const batchValues = [...batch];
+          
+          console.log(`[${requestId}] Batch ${batchNum}: Getting ALL UA/IP pairs for ${batch.length} user IDs (no date/event type filters)`);
           
           console.log(`[${requestId}] Batch ${batchNum}: Executing query with ${batch.length} parameters`);
           console.log(`[${requestId}] Batch ${batchNum}: Sample user IDs:`, batch.slice(0, 3));
