@@ -346,10 +346,27 @@ app.post('/api/export', async (req, res) => {
                 AND ue.advertiser IS NOT NULL
               GROUP BY advertiser
               ORDER BY total_events DESC
+              LIMIT 20
             `;
             const allAdvertisersParams = [params.startDate, params.endDate, params.eventTypes[0]];
             const allAdvertisersResult = await client.query(allAdvertisersQuery, allAdvertisersParams);
-            console.log(`[${requestId}] All advertisers in data:`, allAdvertisersResult.rows);
+            console.log(`[${requestId}] All advertisers in data (top 20):`, allAdvertisersResult.rows);
+            
+            // Check if requested advertiser exists (case-insensitive and partial match)
+            const requestedAdvertiser = mappedCategories[0];
+            const matchingAdvertisers = allAdvertisersResult.rows.filter(row => {
+              const rowAdvertiser = (row.advertiser || '').toLowerCase();
+              const requestedLower = requestedAdvertiser.toLowerCase();
+              return rowAdvertiser === requestedLower || 
+                     rowAdvertiser.includes(requestedLower) || 
+                     requestedLower.includes(rowAdvertiser);
+            });
+            if (matchingAdvertisers.length > 0) {
+              console.log(`[${requestId}] Found matching advertisers:`, matchingAdvertisers);
+            } else {
+              console.log(`[${requestId}] WARNING: Requested advertiser '${requestedAdvertiser}' not found in data!`);
+              console.log(`[${requestId}] Available advertisers:`, allAdvertisersResult.rows.map(r => r.advertiser));
+            }
           }
         } catch (diagError) {
           console.error(`[${requestId}] Diagnostic query failed:`, diagError);
