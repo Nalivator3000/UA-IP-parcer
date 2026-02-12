@@ -311,9 +311,10 @@ app.post('/api/export', async (req, res) => {
           
           // If advertiser filter is applied, check data for that advertiser
           if (params.categories && params.categories.length > 0 && params.eventTypes && params.eventTypes.length > 0) {
+            // Map UI values to database values
             const mappedCategories = params.categories.map(cat => {
-              if (cat === '1') return '4rabet';
-              if (cat === '2') return 'Crorebet';
+              if (cat === '1' || cat === '4rabet') return '1';  // Map to database value
+              if (cat === '2' || cat === 'Crorebet') return '2'; // Map to database value
               return cat;
             });
             const advertiserDiagQuery = `
