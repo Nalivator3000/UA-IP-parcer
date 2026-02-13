@@ -46,6 +46,7 @@ function buildWhereConditions(params) {
   let paramIndex = 1;
 
   // Date range - start from beginning of day, end at end of day
+  // Note: In DB, event_date is used (pixel_ts is NULL), but source files use PIXEL_TS
   if (params.startDate && params.endDate) {
     // Start: beginning of the day (00:00:00)
     conditions.push(`ue.event_date >= $${paramIndex}::date`);
@@ -176,6 +177,7 @@ app.post('/api/export', async (req, res) => {
       
       if (params.startDate && params.endDate) {
         // Start: beginning of the day (00:00:00)
+        // Note: In DB, event_date is used (pixel_ts is NULL), but source files use PIXEL_TS
         periodConditions.push(`ue.event_date >= $${periodIndex}::date`);
         periodValues.push(params.startDate);
         periodIndex++;
@@ -337,21 +339,21 @@ app.post('/api/export', async (req, res) => {
             console.log(`[${requestId}] Advertiser diagnostic result:`, advertiserDiagResult.rows);
             
             // Also check what advertisers actually exist in the data
-            const allAdvertisersQuery = `
-              SELECT 
-                advertiser,
-                COUNT(*) as total_events,
-                COUNT(DISTINCT external_user_id) as unique_users
-              FROM public.user_events ue
-              WHERE ue.external_user_id IS NOT NULL
-                AND ue.event_date >= $1::date
-                AND ue.event_date < ($2::date + INTERVAL '1 day')
-                AND ue.event_type = $3
-                AND ue.advertiser IS NOT NULL
-              GROUP BY advertiser
-              ORDER BY total_events DESC
-              LIMIT 20
-            `;
+              const allAdvertisersQuery = `
+                SELECT
+                  advertiser,
+                  COUNT(*) as total_events,
+                  COUNT(DISTINCT external_user_id) as unique_users
+                FROM public.user_events ue
+                WHERE ue.external_user_id IS NOT NULL
+                  AND ue.event_date >= $1::date
+                  AND ue.event_date < ($2::date + INTERVAL '1 day')
+                  AND ue.event_type = $3
+                  AND ue.advertiser IS NOT NULL
+                GROUP BY advertiser
+                ORDER BY total_events DESC
+                LIMIT 20
+              `;
             const allAdvertisersParams = [params.startDate, params.endDate, params.eventTypes[0]];
             const allAdvertisersResult = await client.query(allAdvertisersQuery, allAdvertisersParams);
             console.log(`[${requestId}] All advertisers in data (top 20):`, allAdvertisersResult.rows);
